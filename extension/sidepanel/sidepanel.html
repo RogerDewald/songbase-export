@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Same policy as the extension default, so the dev harness breaks the same way if a
+       library ever needs eval. -->
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'self'">
+  <title>Songbase Export</title>
+  <link rel="stylesheet" href="sidepanel.css">
+  <script src="../vendor/jszip.min.js"></script>
+  <script src="../vendor/pptxgen.min.js"></script>
+  <script type="module" src="sidepanel.js"></script>
+</head>
+<body>
+  <header class="head">
+    <div class="head-text">
+      <div class="eyebrow" id="status-line">Songbase Export</div>
+      <h1 id="song-title">Connecting…</h1>
+      <div id="song-meta" class="meta"></div>
+    </div>
+    <button id="add-to-set" class="btn btn-secondary" type="button" disabled title="Add this song to the set list">+ Set list</button>
+  </header>
+
+  <div id="dup-prompt" class="prompt" hidden>
+    <span>This song is already in the set list, in this key.</span>
+    <div class="prompt-actions">
+      <button type="button" class="btn btn-small" data-dup="add">Add again</button>
+      <button type="button" class="btn btn-small" data-dup="replace">Replace</button>
+      <button type="button" class="btn btn-small btn-quiet" data-dup="cancel">Cancel</button>
+    </div>
+  </div>
+
+  <div id="banner" class="banner" hidden>
+    <span id="banner-text"></span>
+    <button type="button" id="banner-action" class="btn btn-small" hidden></button>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Export format">
+    <button type="button" role="tab" id="tab-word" data-tab="word" aria-controls="panel-word">Word</button>
+    <button type="button" role="tab" id="tab-text" data-tab="text" aria-controls="panel-text">Text</button>
+    <button type="button" role="tab" id="tab-pptx" data-tab="pptx" aria-controls="panel-pptx">PowerPoint</button>
+    <button type="button" role="tab" id="tab-setlist" data-tab="setlist" aria-controls="panel-setlist">Set list <span class="count" id="set-count">0</span></button>
+  </nav>
+
+  <div class="scope" id="scope" role="radiogroup" aria-label="What to export">
+    <button type="button" role="radio" data-scope="song">This song</button>
+    <button type="button" role="radio" data-scope="setlist">Set list (<span id="scope-count">0</span>)</button>
+  </div>
+
+  <main>
+    <section id="panel-word" class="panel" role="tabpanel" aria-labelledby="tab-word" data-panel="word">
+      <p class="hint" data-hint="chords" hidden></p>
+      <form class="opts" autocomplete="off">
+        <label class="row"><span>Layout</span>
+          <select data-pref="word.mode">
+            <option value="chords">Chords above words</option>
+            <option value="lyrics">Lyrics only</option>
+          </select>
+        </label>
+        <label class="row"><span>Font</span><select data-pref="word.font" data-choices="FONTS"></select></label>
+        <label class="row"><span>Size</span><select data-pref="word.sizePt" data-type="int" data-range="9-18"></select></label>
+        <label class="row"><span>Chord font</span><select data-pref="word.mono" data-choices="MONO_FONTS"></select></label>
+        <div class="checks">
+          <label><input type="checkbox" data-pref="word.numbers"> Verse numbers</label>
+          <label><input type="checkbox" data-pref="word.meta"> Title info (hymn #, key, capo)</label>
+          <label><input type="checkbox" data-pref="word.comments"> Notes such as the tune</label>
+          <label><input type="checkbox" data-pref="word.chordColor"> Blue chords</label>
+          <label><input type="checkbox" data-pref="word.chorusItalic"> Italic chorus</label>
+        </div>
+        <label class="row"><span>Page (.docx)</span>
+          <select data-pref="word.page"><option value="letter">Letter</option><option value="a4">A4</option></select>
+        </label>
+      </form>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" data-action="copy-word">Copy for Word</button>
+        <button type="button" class="btn" data-action="download-docx">Download .docx</button>
+      </div>
+      <p class="tip">Paste into Word with Ctrl+V. The .docx uses named styles (Verse, Chorus, Chord …) so you can restyle everything at once.</p>
+      <div class="preview preview-word" aria-label="Word preview"><div class="page" id="preview-word"></div></div>
+    </section>
+
+    <section id="panel-text" class="panel" role="tabpanel" aria-labelledby="tab-text" data-panel="text" hidden>
+      <p class="hint" data-hint="chords" hidden></p>
+      <form class="opts" autocomplete="off">
+        <label class="row"><span>Style</span>
+          <select data-pref="text.style">
+            <option value="chords">Chords over lyrics</option>
+            <option value="lyrics">Lyrics only</option>
+            <option value="chordpro">ChordPro (for music apps)</option>
+          </select>
+        </label>
+        <label class="row"><span>Chorus indent</span><select data-pref="text.chorusIndent" data-type="int" data-range="2-8"></select></label>
+        <div class="checks">
+          <label><input type="checkbox" data-pref="text.numbers"> Verse numbers</label>
+          <label><input type="checkbox" data-pref="text.meta"> Title info (hymn #, key, capo)</label>
+          <label><input type="checkbox" data-pref="text.comments"> Notes such as the tune</label>
+        </div>
+      </form>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" data-action="copy-text">Copy text</button>
+        <button type="button" class="btn" data-action="download-txt">Download .txt</button>
+      </div>
+      <p class="tip">Chords line up in a fixed-width font (Consolas, Courier New, Notepad).</p>
+      <pre class="preview preview-text" id="preview-text" aria-label="Text preview"></pre>
+    </section>
+
+    <section id="panel-pptx" class="panel" role="tabpanel" aria-labelledby="tab-pptx" data-panel="pptx" hidden>
+      <form class="opts" autocomplete="off">
+        <label class="row"><span>Theme</span>
+          <select data-pref="pptx.theme">
+            <option value="dark">White on black</option>
+            <option value="light">Black on white</option>
+            <option value="navy">White on navy</option>
+            <option value="custom">Custom colours</option>
+          </select>
+        </label>
+        <div class="row colors" data-show-when="pptx.theme=custom">
+          <label><span>Background</span><input type="color" data-pref="pptx.bg" data-type="color"></label>
+          <label><span>Text</span><input type="color" data-pref="pptx.fg" data-type="color"></label>
+        </div>
+        <label class="row"><span>Font</span><select data-pref="pptx.font" data-choices="SLIDE_FONTS"></select></label>
+        <label class="row"><span>Largest text</span><select data-pref="pptx.maxPt" data-type="int" data-range="28-60" data-step="2"></select></label>
+        <label class="row"><span>Smallest text</span><select data-pref="pptx.minPt" data-type="int" data-range="18-44" data-step="2"></select></label>
+        <label class="row"><span>Lines per slide</span><select data-pref="pptx.maxLines" data-type="int" data-range="4-12"></select></label>
+        <div class="checks">
+          <label><input type="checkbox" data-pref="pptx.repeatChorus"> Repeat chorus after each verse</label>
+          <label><input type="checkbox" data-pref="pptx.titleSlides"> Title slide for each song</label>
+          <label><input type="checkbox" data-pref="pptx.blankBetweenSongs"> Blank slide between songs</label>
+          <label><input type="checkbox" data-pref="pptx.chorusItalic"> Italic chorus</label>
+          <label><input type="checkbox" data-pref="pptx.notes"> Chords in speaker notes</label>
+        </div>
+      </form>
+      <div class="actions">
+        <button type="button" class="btn btn-primary" data-action="download-pptx">Download .pptx</button>
+      </div>
+      <p class="tip" id="pptx-summary"></p>
+      <div class="preview preview-slides" id="preview-slides" aria-label="Slide preview"></div>
+    </section>
+
+    <section id="panel-setlist" class="panel" role="tabpanel" aria-labelledby="tab-setlist" data-panel="setlist" hidden>
+      <label class="row"><span>Name</span><input type="text" id="setlist-name" maxlength="80" spellcheck="false"></label>
+      <ol class="setlist" id="setlist-items"></ol>
+      <p class="empty" id="setlist-empty">Open songs on Songbase and press <strong>+ Set list</strong> to collect them here. Each song keeps the key it was in when you added it.</p>
+      <div class="actions" id="setlist-actions">
+        <button type="button" class="btn" data-goto="word">Export to Word</button>
+        <button type="button" class="btn" data-goto="text">Export as text</button>
+        <button type="button" class="btn" data-goto="pptx">Export to PowerPoint</button>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn btn-quiet" id="setlist-clear">Clear set list</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
