@@ -1,4 +1,7 @@
 // Live-site check for extension/content/extract.js.
+// The source-normalising rules follow Songbase's own markup parsing
+// (https://github.com/ReganRyanNZ/songbase, Copyright (c) 2017 Regan Ryan, MIT License;
+// full notice in THIRD_PARTY_NOTICES.md).
 //
 // Paste extract.js and then this file into DevTools (or any page-context JS runner) on a
 // songbase.life page, then run:  await SBX_liveCheck({ sample: 30 })
