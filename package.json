@@ -1,0 +1,21 @@
+{
+  "name": "songbase-export",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chrome extension: export songbase.life songs to Word, plain text and PowerPoint",
+  "engines": {
+    "node": ">=24.15"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "vendor": "node tools/vendor.mjs",
+    "samples": "node tools/gen-samples.mjs",
+    "harness": "node dev/serve.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "30.1.1",
+    "jszip": "3.10.1",
+    "pptxgenjs": "4.0.1"
+  }
+}

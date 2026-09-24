@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Songbase Export — panel harness</title>
+  <style>
+    body { margin: 0; display: flex; gap: 16px; font: 13px system-ui, sans-serif; background: #e9ecf1; }
+    aside { width: 230px; padding: 12px; display: grid; gap: 6px; align-content: start; }
+    aside h1 { font-size: 14px; margin: 0 0 6px; }
+    aside button { text-align: left; padding: 6px 8px; }
+    iframe { width: 380px; height: 100vh; border: 0; background: #fff; box-shadow: 0 0 0 1px #c9ced6; }
+    #log { font: 11px Consolas, monospace; white-space: pre-wrap; background: #fff; padding: 6px; min-height: 60px; }
+  </style>
+</head>
+<body>
+  <iframe id="panel" src="/extension/sidepanel/sidepanel.html?harness=1" allow="clipboard-write" title="Side panel"></iframe>
+  <aside>
+    <h1>Harness (placeholder songs)</h1>
+    <button data-call="setSong" data-arg="hymn">Song: hymn (chords, numbers)</button>
+    <button data-call="setSong" data-arg="refrain">Song: refrain (no chords)</button>
+    <button data-call="setSong" data-arg="long">Song: long stanza</button>
+    <button data-call="transpose" data-arg="1">Transpose +1</button>
+    <button data-call="transpose" data-arg="-1">Transpose −1</button>
+    <button data-call="setChordsHidden" data-arg="true">Hide chords on site</button>
+    <button data-call="setChordsHidden" data-arg="false">Show chords on site</button>
+    <button data-call="setStatus" data-arg="not-song">State: song list page</button>
+    <button data-call="setStatus" data-arg="not-songbase">State: other website</button>
+    <button data-call="setStatus" data-arg="no-content-script">State: tab needs reload</button>
+    <button data-call="setStatus" data-arg="loading">State: loading</button>
+    <div id="log"></div>
+  </aside>
+  <script>
+    const frame = document.getElementById('panel');
+    const log = document.getElementById('log');
+    document.querySelectorAll('[data-call]').forEach((b) => b.addEventListener('click', () => {
+      const mock = frame.contentWindow.__mock;
+      const raw = b.dataset.arg;
+      const arg = raw === 'true' ? true : raw === 'false' ? false : isNaN(Number(raw)) ? raw : Number(raw);
+      mock[b.dataset.call](arg);
+    }));
+    setInterval(() => {
+      const mock = frame.contentWindow && frame.contentWindow.__mock;
+      if (mock) log.textContent = `downloads: ${JSON.stringify(mock.downloads)}\nreloads: ${mock.reloads}`;
+    }, 500);
+  </script>
+</body>
+</html>
