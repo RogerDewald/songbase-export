@@ -1,6 +1,8 @@
 // Test-only port of Songbase's own `getLyricsHTML` pipeline (from the site's JS bundle),
 // used to build DOM fixtures for the extractor from placeholder markup. The live-site
 // check (tools/live-check.js) is what proves the extractor against the REAL page.
+// Songbase: https://github.com/ReganRyanNZ/songbase, Copyright (c) 2017 Regan Ryan,
+// MIT License; full notice in THIRD_PARTY_NOTICES.md.
 
 const regex = {
   capo: /.*capo (\d+).*/i,

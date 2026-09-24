@@ -53,6 +53,15 @@ Tips:
 - Downloaded Office files may open in *Protected View*. Click **Enable Editing**.
 - The shortcut can be changed at `chrome://extensions/shortcuts`.
 
+## Credits
+
+- [Songbase](https://github.com/ReganRyanNZ/songbase) by Regan Ryan (MIT License). Key
+  detection and the markup rules used in tests are derived from its code.
+- [JSZip](https://stuk.github.io/jszip/) and [PptxGenJS](https://gitbrent.github.io/PptxGenJS/)
+  are bundled for building the .docx and .pptx files.
+
+Full licence notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Privacy
 
 Everything happens in your browser. The extension makes no network requests of its own.

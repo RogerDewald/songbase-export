@@ -1,5 +1,7 @@
 // Key detection, ported from Songbase's own `getKeyFromChords` so the "Key:" line
 // agrees with what the site would say for the chords being displayed.
+// Songbase: https://github.com/ReganRyanNZ/songbase, Copyright (c) 2017 Regan Ryan,
+// MIT License; full notice in THIRD_PARTY_NOTICES.txt.
 //
 // Site algorithm: take the root of the first chord in every [..] (A–G, optional b/#,
 // optional m); if the first root equals the last, that is the key (a minor root becomes
