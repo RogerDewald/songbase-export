@@ -17,8 +17,8 @@ export const THEMES = {
 
 export const DEFAULT_PREFS = {
   schema: PREFS_SCHEMA,
-  ui: { tab: 'word', scope: 'song' },
-  word: { mode: 'chords', font: 'Calibri', sizePt: 12, mono: 'Consolas', chordColor: true, chorusItalic: false, numbers: true, meta: true, comments: true, page: 'letter' },
+  ui: { tab: 'word', scope: 'song', optsWord: false, optsText: false, optsPptx: false },
+  word: { mode: 'chords', font: 'Calibri', sizePt: 12, mono: 'Consolas', chordColor: true, chorusItalic: false, numbers: true, meta: true, comments: true, page: 'letter', pairShort: true },
   text: { style: 'chords', chorusIndent: 4, numbers: true, meta: true, comments: true },
   pptx: { theme: 'dark', bg: '000000', fg: 'FFFFFF', font: 'Arial', maxPt: 44, minPt: 28, maxLines: 8, titleSlides: true, blankBetweenSongs: false, repeatChorus: true, chorusItalic: false, notes: true },
 };
@@ -29,10 +29,10 @@ const int = (min, max) => (v) => (Number.isInteger(v) && v >= min && v <= max ? 
 const color = (v) => (typeof v === 'string' && /^[0-9A-Fa-f]{6}$/.test(v) ? v.toUpperCase() : undefined);
 
 const SCHEMA = {
-  ui: { tab: oneOf(['word', 'text', 'pptx', 'setlist']), scope: oneOf(['song', 'setlist']) },
+  ui: { tab: oneOf(['word', 'text', 'pptx', 'setlist']), scope: oneOf(['song', 'setlist']), optsWord: bool, optsText: bool, optsPptx: bool },
   word: {
     mode: oneOf(['chords', 'lyrics']), font: oneOf(FONTS), sizePt: int(8, 20), mono: oneOf(MONO_FONTS),
-    chordColor: bool, chorusItalic: bool, numbers: bool, meta: bool, comments: bool, page: oneOf(['letter', 'a4']),
+    chordColor: bool, chorusItalic: bool, numbers: bool, meta: bool, comments: bool, page: oneOf(['letter', 'a4']), pairShort: bool,
   },
   text: { style: oneOf(TEXT_STYLES), chorusIndent: int(2, 8), numbers: bool, meta: bool, comments: bool },
   pptx: {

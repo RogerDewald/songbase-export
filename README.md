@@ -16,7 +16,7 @@ the selected tune and whether chords are on. It then writes each format properly
 | You want… | Use | Notes |
 |---|---|---|
 | A song sheet in **Word** | **Copy for Word**, then Ctrl+V in Word | Keeps the bold title, hymn number, verse numbers with hanging indents and the indented chorus. Chords sit above the words in a fixed-width font (Consolas). |
-| A **Word file** to keep or print | **Download .docx** | Uses named styles (*Verse*, *Chorus*, *Chord*, *Verse Number*, *Song Meta*), so you can restyle every chord or verse in one click. Each song starts on a new page. |
+| A **Word file** to keep or print | **Download .docx** | Uses named styles (*Verse*, *Chorus*, *Chord*, *Verse Number*, *Song Meta*), so you can restyle every chord or verse in one click. Each song starts on its own page, unless two neighbouring songs both fit whole on one page (see below). |
 | **Plain text** (email, messages, notes) | **Copy text** with *Chords over lyrics* or *Lyrics only* | Chords line up in any fixed-width font. |
 | A **music app** (OnSong, SongbookPro, Planning Center, ChordPro tools) | **Copy text** or **Download** with *ChordPro* | Saved as `.cho`. |
 | **PowerPoint** slides | **Download .pptx** | Pasted text always lands on one slide, so the extension builds the deck itself: one slide per verse or chorus, a title slide, and text sized to fit. The chorus can repeat after every verse. Chords go in the speaker notes. |
@@ -38,12 +38,34 @@ To update after changing files, click the reload icon on the extension's card in
 1. Open a song on songbase.life. Transpose it or pick a tune there if you like.
 2. Click the extension icon (or press **Alt+Shift+S**). The side panel opens and stays open
    while you move between songs.
-3. Pick **Word**, **Text** or **PowerPoint**, adjust the options and check the preview.
-   Then copy or download.
-4. **Set list:** on each song, press **+ Set list**. Each song keeps the key it was in when
-   you added it. In any format tab, switch *This song / Set list* to export the whole list
-   as one document or one deck. Reorder, rename or clear the list on the **Set list** tab.
-   The toolbar badge shows how many songs are in it.
+3. Pick **Word**, **Text** or **PowerPoint**. The choice that matters most (chords above the
+   words or lyrics only, text style, slide colours) is right at the top; fonts and the rest
+   are under **Options**, which shows a one-line summary and remembers whether you left it
+   open. The buttons to copy or download stay at the bottom of the panel however far you
+   scroll the preview.
+4. **Set list:** on each song, press **Add to set list** (it turns into **In set list** once the
+   song is there in that key). Each song keeps the key it was in when you added it. In any
+   format tab, switch *This song / Set list* to export the whole list as one document or
+   one deck. On the **Set list** tab, drag songs by the grip (or use the arrows) to reorder
+   them, and rename the list; removing a song or clearing the list has an **Undo** in the
+   message that appears. The toolbar badge shows how many songs are in the list.
+
+### Pages in Word
+
+With **Fit two short songs on one page** on (the default; it is under *Fonts & options*),
+every song starts on its own page, except that two neighbouring songs share a page when
+**both fit whole** on it. A song is never split to make that work, songs are never
+reordered (a set list stays in worship order), and never more than two share a page.
+The second song of a shared page gets a thin rule above its title. The preview shows the
+pages as they will fall ("Page 2 · two songs share this page"), with a page count.
+
+How it decides: the panel measures each song with the real font, works out its height the
+way Word lays it out, and pairs songs only when the two, plus the space between them, fit
+in a page with a little to spare. It plans for a page with Word's standard one-inch margins,
+so the plan also holds when you paste ("Copy for Word") into a blank document (your own
+template may have other margins). If Word ever disagrees, nothing gets cut in half: the
+second song of a shared page is set to keep together, so Word moves it whole to the next
+page. Untick the option for one song per page.
 
 Tips:
 - If Songbase hides chords (its ♫ button), the export has no chords. Turn them back on to
@@ -78,8 +100,12 @@ church's licence (for example CCLI), not by this tool.
 - [ ] Transposing on Songbase updates the preview (the header shows *transposed +N*).
 - [ ] **Copy for Word** → Ctrl+V in Word, in both *Chords above words* and *Lyrics only*.
 - [ ] **Download .docx** and **Download .pptx** open in Word and PowerPoint.
+- [ ] A set list with a few short songs and a long one: **Download .docx** puts two short
+      neighbours on one page (rule between them), the long song on its own page, and no song
+      is cut across two pages. Unticking *Fit two short songs on one page* gives one per page.
 - [ ] **Copy text** → paste into Notepad; the chords line up.
 - [ ] Add 2–3 songs to the set list, restart Chrome, and they are still there.
+- [ ] Remove a song and clear the set list; **Undo** brings them back in place.
 - [ ] On a non-Songbase tab the panel shows only the set list, and it still exports.
 - [ ] After reloading the extension, the panel's **Reload tab** button recovers.
 
@@ -100,9 +126,18 @@ Office checks (these open Word/PowerPoint invisibly and never close documents yo
 ```
 pwsh -File test/office/verify-docx.ps1
 pwsh -File test/office/verify-pptx.ps1
-node tools/cfhtml.mjs out/sample-word-lyrics.html out/sample-word-chords.html
+node tools/cfhtml.mjs out/sample-word-lyrics.html out/sample-word-chords.html out/sample-word-pairs.html out/sample-word-forced.html out/sample-word-forced-comment.html
 powershell -NoProfile -STA -File test/office/verify-paste.ps1
+pwsh -File test/office/verify-pages.ps1
+powershell -NoProfile -STA -File test/office/verify-pages.ps1 -Paste
 ```
+
+`verify-pages.ps1` checks the page-sharing feature against Word's real layout: songs start on
+the pages the plan says and none is split (including deliberately over-paired samples, one
+whose first song ends with a comment, that must fall back to one song per page), the
+planner's height estimate is within 1.5% of Word's,
+and the per-font line heights in `pagination.js` match Word's. Run it after changing fonts,
+sizes, spacing or `pagination.js`. (`-Paste` replaces the clipboard contents.)
 
 To check the real Chrome clipboard path, open the panel on a Songbase song and choose
 *Lyrics only*. Click **Copy for Word**, then run:
@@ -123,7 +158,8 @@ Layout:
 extension/            the unpacked extension (nothing dev-only inside)
   content/            extract.js (DOM → song model), content.js (panel link, cache lookups)
   sidepanel/          the UI
-  shared/             pure renderers: text, Word HTML, .docx, slides/.pptx, set list, prefs
+  shared/             pure renderers: text, Word HTML, .docx, slides/.pptx, set list, prefs,
+                      and pagination.js (which Word songs share a page)
   vendor/             jszip 3.10.1, pptxgenjs 4.0.1 (MIT)
 dev/                  harness + mock chrome API
 test/                 unit tests, fixtures (invented placeholder lyrics only), Office checks

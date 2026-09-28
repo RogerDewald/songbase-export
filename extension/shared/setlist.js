@@ -59,6 +59,28 @@ export function createSetListStore(area, { now = () => new Date().toISOString(),
       [items[i], items[j]] = [items[j], items[i]];
       await save({ ...current, items });
     },
+    // Drag and drop: the item ends up at `index` (0-based, counted in the list without it).
+    async moveTo(itemUid, index) {
+      const items = [...current.items];
+      const from = items.findIndex((it) => it.uid === itemUid);
+      if (from < 0) return;
+      const [item] = items.splice(from, 1);
+      const to = Math.max(0, Math.min(Math.trunc(index) || 0, items.length));
+      if (to === from) return;
+      items.splice(to, 0, item);
+      await save({ ...current, items });
+    },
+    // Puts removed items back (Undo). Items already present are skipped, so undoing twice, or
+    // after the song was added again, cannot duplicate one. Returns how many came back.
+    async insert(items, index = 0) {
+      const have = new Set(current.items.map((it) => it.uid));
+      const back = clean({ schema: SETLIST_SCHEMA, items }).items.filter((it) => !have.has(it.uid));
+      if (!back.length) return 0;
+      const next = [...current.items];
+      next.splice(Math.max(0, Math.min(Math.trunc(index) || 0, next.length)), 0, ...back);
+      await save({ ...current, items: next });
+      return back.length;
+    },
     async rename(name) {
       await save({ ...current, name: String(name || '').trim().slice(0, 80) || 'Set list' });
     },

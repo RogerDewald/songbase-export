@@ -2,14 +2,24 @@
 // verse or title in Word with one click. Zipped with JSZip (passed in, so the same code
 // runs in the panel and in Node tests).
 //
-// OOXML is order-sensitive: pPr = pStyle, keepNext, keepLines, pageBreakBefore, spacing,
-// ind; rPr = rStyle, rFonts, b, bCs, i, iCs, color, sz, szCs; style = name, basedOn, next,
-// uiPriority, qFormat, pPr, rPr. Units: twips (1440/in), half-points (sz 24 = 12pt).
+// Keep-with-next is decided per paragraph in songXml(), never by a style: a style's keepNext
+// cannot be switched off by leaving it out of a paragraph, so a comment that ends a song
+// would chain to the next song's title. (Heading1 and SongMeta do carry it, on purpose: a
+// title always stays with what follows.)
+//
+// OOXML is order-sensitive: pPr = pStyle, keepNext, keepLines, pageBreakBefore, pBdr,
+// spacing, ind; rPr = rStyle, rFonts, b, bCs, i, iCs, color, sz, szCs; style = name,
+// basedOn, next, uiPriority, qFormat, pPr, rPr. Units: twips (1440/in), half-points
+// (sz 24 = 12pt), eighths of a point for border widths (sz 6 = 0.75pt).
 
 import { escapeXml } from './escape.js';
 import { metaItems } from './ir.js';
 import { songGutter } from './layout.js';
-import { wordOptions, groupBlocks, CHORD_COLOR } from './html.js';
+import {
+  wordOptions, groupBlocks, songSlots, CHORD_COLOR, PAPER_TWIPS,
+  HANG_IN, GROUP_GAP_PT, TITLE_EXTRA_PT, TITLE_AFTER_PT, META_LESS_PT, COMMENT_LESS_PT, monoSizePt,
+  PAIR_GAP_PT, PAIR_RULE_PAD_PT, PAIR_RULE_COLOR,
+} from './html.js';
 
 export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
@@ -17,9 +27,10 @@ const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
-const HANG = 504; // 0.35in: verse-number hanging indent and chorus step
-const GROUP_GAP = 200; // twips after the last paragraph of a group (10pt)
-const PAGE = { letter: { w: 12240, h: 15840 }, a4: { w: 11906, h: 16838 } };
+const tw = (pt) => Math.round(pt * 20);
+const HANG = Math.round(HANG_IN * 1440); // 0.35in: verse-number hanging indent and chorus step
+const GROUP_GAP = tw(GROUP_GAP_PT); // twips after the last paragraph of a group
+const PAGE = PAPER_TWIPS;
 
 const wt = (text) => `<w:t xml:space="preserve">${escapeXml(text)}</w:t>`;
 const BR = '<w:r><w:br/></w:r>';
@@ -33,11 +44,15 @@ function run(text, { style = null, b = false, i = false } = {}) {
   return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}${wt(text)}</w:r>`;
 }
 
-function para(style, content, { keepNext = false, pageBreakBefore = false, spacingAfter = null, ind = null } = {}) {
+function para(style, content, { keepNext = false, pageBreakBefore = false, rule = false, spacingBefore = null, spacingAfter = null, ind = null } = {}) {
   let pPr = `<w:pStyle w:val="${style}"/>`;
   if (keepNext) pPr += '<w:keepNext/>';
   if (pageBreakBefore) pPr += '<w:pageBreakBefore/>';
-  if (spacingAfter !== null) pPr += `<w:spacing w:after="${spacingAfter}"/>`;
+  // Top rule: w:space is the gap between the rule and the text, in points.
+  if (rule) pPr += `<w:pBdr><w:top w:val="single" w:sz="6" w:space="${PAIR_RULE_PAD_PT}" w:color="${PAIR_RULE_COLOR}"/></w:pBdr>`;
+  if (spacingBefore !== null || spacingAfter !== null) {
+    pPr += `<w:spacing${spacingBefore !== null ? ` w:before="${spacingBefore}"` : ''}${spacingAfter !== null ? ` w:after="${spacingAfter}"` : ''}/>`;
+  }
   if (ind) pPr += `<w:ind w:left="${ind.left}" w:hanging="${ind.hanging}"/>`;
   return `<w:p><w:pPr>${pPr}</w:pPr>${content}</w:p>`;
 }
@@ -63,21 +78,31 @@ function lineRuns(line, italicAll) {
   return out;
 }
 
-function songXml(song, o, first) {
+// `slot` comes from songSlots(). A song that starts a page gets pageBreakBefore. A song
+// that shares a page (`joined`) gets space and a hairline rule above its title, and EVERY
+// paragraph keeps with the next, so if the page planner was optimistic Word moves the
+// whole song to the next page instead of splitting it.
+function songXml(song, o, slot) {
   const chords = o.mode === 'chords' && song.hasChords;
   const out = [];
-  out.push(para('Heading1', run(song.title), { pageBreakBefore: !first }));
+  out.push(
+    para('Heading1', run(song.title), {
+      pageBreakBefore: slot.breakBefore,
+      ...(slot.joined ? { rule: true, spacingBefore: tw(PAIR_GAP_PT), spacingAfter: tw(TITLE_AFTER_PT) } : {}),
+    }),
+  );
   const meta = o.meta ? metaItems(song, { chords }) : [];
   out.push(para('SongMeta', meta.length ? run(meta.join(' · ')) : ''));
 
   const numbered = o.numbers && songGutter(song) > 0;
   const gutter = chords ? songGutter(song, { numbers: o.numbers }) : 0;
 
-  for (const group of song.groups) {
-    const blocks = groupBlocks(group, o, { chords, gutter });
+  const grouped = song.groups.map((group) => groupBlocks(group, o, { chords, gutter }));
+  const lastGroup = grouped.map((b) => b.length > 0).lastIndexOf(true);
+  grouped.forEach((blocks, gi) => {
     blocks.forEach(({ part, rows, lines }, idx) => {
       const last = idx === blocks.length - 1;
-      const keep = { keepNext: !last, spacingAfter: last ? GROUP_GAP : 0 };
+      const keep = { keepNext: slot.joined ? !(last && gi === lastGroup) : !last, spacingAfter: last ? GROUP_GAP : 0 };
       if (part.type === 'comment') {
         const left = !chords && numbered ? HANG : 0;
         out.push(para('SongComment', run(part.text), { ...keep, ind: { left, hanging: 0 } }));
@@ -96,7 +121,7 @@ function songXml(song, o, first) {
       const ind = { left: chorus ? base + HANG : base, hanging: hasNum ? HANG : 0 };
       out.push(para(chorus ? 'Chorus' : 'Verse', lead + body, { ...keep, ind }));
     });
-  }
+  });
   return out.join('');
 }
 
@@ -105,7 +130,7 @@ function stylesXml(o) {
   const font = escapeXml(o.font);
   const mono = escapeXml(o.mono);
   const size = hp(o.sizePt);
-  const monoSize = hp(Math.max(8, o.sizePt - 1));
+  const monoSize = hp(monoSizePt(o.sizePt));
   const chordColor = o.chordColor ? `<w:color w:val="${CHORD_COLOR.slice(1)}"/>` : '';
   return (
     XML_HEAD +
@@ -116,9 +141,9 @@ function stylesXml(o) {
     '</w:docDefaults>' +
     '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>' +
     '<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>' +
-    `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:after="80"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:bCs/><w:color w:val="000000"/><w:sz w:val="${hp(o.sizePt + 6)}"/><w:szCs w:val="${hp(o.sizePt + 6)}"/></w:rPr></w:style>` +
-    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SongMeta"><w:name w:val="Song Meta"/><w:basedOn w:val="Normal"/><w:next w:val="Verse"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:after="${GROUP_GAP}"/></w:pPr><w:rPr><w:color w:val="595959"/><w:sz w:val="${hp(o.sizePt - 2)}"/><w:szCs w:val="${hp(o.sizePt - 2)}"/></w:rPr></w:style>` +
-    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SongComment"><w:name w:val="Song Comment"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:after="120"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="7F7F7F"/><w:sz w:val="${hp(o.sizePt - 1)}"/><w:szCs w:val="${hp(o.sizePt - 1)}"/></w:rPr></w:style>` +
+    `<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="9"/><w:qFormat/><w:pPr><w:keepNext/><w:keepLines/><w:spacing w:after="${tw(TITLE_AFTER_PT)}"/><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:bCs/><w:color w:val="000000"/><w:sz w:val="${hp(o.sizePt + TITLE_EXTRA_PT)}"/><w:szCs w:val="${hp(o.sizePt + TITLE_EXTRA_PT)}"/></w:rPr></w:style>` +
+    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SongMeta"><w:name w:val="Song Meta"/><w:basedOn w:val="Normal"/><w:next w:val="Verse"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:after="${GROUP_GAP}"/></w:pPr><w:rPr><w:color w:val="595959"/><w:sz w:val="${hp(o.sizePt - META_LESS_PT)}"/><w:szCs w:val="${hp(o.sizePt - META_LESS_PT)}"/></w:rPr></w:style>` +
+    `<w:style w:type="paragraph" w:customStyle="1" w:styleId="SongComment"><w:name w:val="Song Comment"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="120"/></w:pPr><w:rPr><w:i/><w:iCs/><w:color w:val="7F7F7F"/><w:sz w:val="${hp(o.sizePt - COMMENT_LESS_PT)}"/><w:szCs w:val="${hp(o.sizePt - COMMENT_LESS_PT)}"/></w:rPr></w:style>` +
     `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Verse"><w:name w:val="Verse"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepLines/><w:spacing w:after="${GROUP_GAP}"/><w:ind w:left="${HANG}" w:hanging="${HANG}"/></w:pPr></w:style>` +
     `<w:style w:type="paragraph" w:customStyle="1" w:styleId="Chorus"><w:name w:val="Chorus"/><w:basedOn w:val="Verse"/><w:qFormat/><w:pPr><w:ind w:left="${HANG * 2}" w:hanging="0"/></w:pPr></w:style>` +
     `<w:style w:type="paragraph" w:customStyle="1" w:styleId="VerseMono"><w:name w:val="Verse (chords)"/><w:basedOn w:val="Normal"/><w:qFormat/><w:pPr><w:keepLines/><w:spacing w:after="${GROUP_GAP}"/></w:pPr><w:rPr><w:rFonts w:ascii="${mono}" w:hAnsi="${mono}" w:eastAsia="${mono}" w:cs="${mono}"/><w:sz w:val="${monoSize}"/><w:szCs w:val="${monoSize}"/></w:rPr></w:style>` +
@@ -133,7 +158,9 @@ export function buildDocxParts(songs, prefs = {}) {
   const list = Array.isArray(songs) ? songs : [songs];
   if (!list.length) throw new Error('Nothing to export');
   const base = { ...wordOptionsBase(prefs) };
-  const body = list.map((s, i) => songXml(s, wordOptions(s, prefs), i === 0)).join('');
+  // `prefs.pages` is the page plan from pagination.js; without one, every song gets its own page.
+  const slots = songSlots(prefs.pages, list.length);
+  const body = list.map((s, i) => songXml(s, wordOptions(s, prefs), slots[i])).join('');
   const page = PAGE[base.page] || PAGE.letter;
   const now = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
   const title = prefs.docTitle || list[0].title;

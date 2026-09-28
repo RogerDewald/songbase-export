@@ -20,6 +20,8 @@
     url: 'https://songbase.life/101',
     downloads: [],
     reloads: 0,
+    opened: [], // urls the panel asked chrome.tabs.create for
+    shown: [], // download ids the panel asked chrome.downloads.show for
     port: null,
   };
   window.__mock = mock;
@@ -136,6 +138,10 @@
         mock.noContentScript = false;
         setTimeout(() => onUpdated.emit(1, { status: 'complete' }), 50);
       },
+      async create({ url }) {
+        mock.opened.push(url);
+        return { id: 99, url };
+      },
     },
     storage: {
       local: {
@@ -157,8 +163,12 @@
     downloads: {
       async download({ url, filename }) {
         const blob = await (await fetch(url)).blob();
+        mock.lastBlob = blob; // so a check can open the file the panel just "saved"
         mock.downloads.push({ filename, size: blob.size, type: blob.type });
         return mock.downloads.length;
+      },
+      show(id) {
+        mock.shown.push(id);
       },
     },
   };

@@ -5,7 +5,7 @@ import { memoryArea } from '../extension/shared/storage.js';
 import { mergePrefs, createPrefsStore, DEFAULT_PREFS, PREFS_KEY } from '../extension/shared/prefs.js';
 import { createSetListStore, SETLIST_KEY } from '../extension/shared/setlist.js';
 import { normalizeSong } from '../extension/shared/ir.js';
-import { hymn, refrain } from './fixtures/songs.mjs';
+import { hymn, refrain, long } from './fixtures/songs.mjs';
 
 test('prefs: defaults, validation, theme colours', () => {
   assert.deepEqual(mergePrefs(undefined), DEFAULT_PREFS);
@@ -70,6 +70,58 @@ test('set list: add, duplicate detection, force, reorder, remove, rename, clear'
   assert.equal(loaded.items[0].song.title, 'Song With A Refrain');
   await reloaded.clear();
   assert.equal(area.data[SETLIST_KEY].items.length, 0);
+});
+
+test('set list: drag-and-drop moves an item to an exact position', async () => {
+  const store = createSetListStore(memoryArea(), { uid: (() => { let n = 0; return () => `u${++n}`; })() });
+  await store.load();
+  for (const s of [hymn(), refrain(), long(), hymn()]) await store.add(s, { force: true });
+  const order = () => store.get().items.map((i) => i.uid).join(',');
+  assert.equal(order(), 'u1,u2,u3,u4');
+  await store.moveTo('u4', 0);
+  assert.equal(order(), 'u4,u1,u2,u3', 'to the top');
+  await store.moveTo('u4', 3);
+  assert.equal(order(), 'u1,u2,u3,u4', 'to the end');
+  await store.moveTo('u1', 2);
+  assert.equal(order(), 'u2,u3,u1,u4', 'index counts the list without the dragged item');
+  await store.moveTo('u2', 99);
+  assert.equal(order(), 'u3,u1,u4,u2', 'past the end clamps');
+  await store.moveTo('u3', -5);
+  assert.equal(order(), 'u3,u1,u4,u2', 'before the start clamps');
+  const stamp = store.get().updatedAt;
+  await store.moveTo('u3', 0);
+  assert.equal(store.get().updatedAt, stamp, 'dropping an item where it was writes nothing');
+  await store.moveTo('nope', 1);
+  assert.equal(order(), 'u3,u1,u4,u2', 'unknown id is ignored');
+});
+
+test('set list: Undo puts removed items back where they were, once', async () => {
+  const store = createSetListStore(memoryArea(), { uid: (() => { let n = 0; return () => `u${++n}`; })() });
+  await store.load();
+  for (const s of [hymn(), refrain(), long()]) await store.add(s, { force: true });
+  const [a, b, c] = store.get().items;
+  const order = () => store.get().items.map((i) => i.uid).join(',');
+
+  await store.remove('u2');
+  assert.equal(order(), 'u1,u3');
+  assert.equal(await store.insert([b], 1), 1, 'restored');
+  assert.equal(order(), 'u1,u2,u3', 'back at its old position');
+  assert.equal(await store.insert([b], 1), 0, 'a second Undo does not duplicate it');
+  assert.equal(order(), 'u1,u2,u3');
+
+  const before = store.get().items;
+  await store.clear();
+  await store.add(long(), { force: true }); // added since clearing
+  assert.equal(await store.insert(before, 0), 3);
+  assert.deepEqual(store.get().items.map((i) => i.song.title), ['Placeholder Hymn of Testing', 'Song With A Refrain', 'A Very Long Stanza', 'A Very Long Stanza'], 'cleared songs return in front of newer ones');
+  assert.equal(await store.insert([{ uid: 'x', song: { irVersion: 99 } }, null, c], 0), 0, 'junk is dropped; songs already present are skipped');
+  assert.equal(a.uid, 'u1');
+});
+
+test('prefs: which option panels are open is remembered, and validated', () => {
+  assert.deepEqual([DEFAULT_PREFS.ui.optsWord, DEFAULT_PREFS.ui.optsText, DEFAULT_PREFS.ui.optsPptx], [false, false, false]);
+  const p = mergePrefs({ ui: { optsWord: true, optsText: 'yes', optsPptx: 1 } });
+  assert.deepEqual([p.ui.optsWord, p.ui.optsText, p.ui.optsPptx], [true, false, false], 'only real booleans are accepted');
 });
 
 test('set list: corrupt or old data is dropped, never thrown', async () => {
