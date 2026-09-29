@@ -64,7 +64,8 @@ export function songSlots(pages, count) {
 }
 
 export function wordOptions(song, prefs = {}) {
-  const o = { ...WORD_DEFAULTS, ...prefs };
+  // An explicit `undefined` must not beat a default (it would silently turn pairing off).
+  const o = { ...WORD_DEFAULTS, ...Object.fromEntries(Object.entries(prefs).filter(([, v]) => v !== undefined)) };
   if (o.mode === 'chords' && !song.hasChords) o.mode = 'lyrics';
   return o;
 }

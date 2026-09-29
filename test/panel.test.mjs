@@ -364,6 +364,56 @@ test('Set list tab: dragging a row by its grip drops it where the pointer is', a
   assert.ok($$('.set-item').every((row) => !row.draggable), 'draggable is switched off again');
 });
 
+test('removing two songs in a row keeps one Undo that brings both back in place', async () => {
+  await click('[data-tab="setlist"]');
+  const before = titles();
+  await click($$('.set-item')[0].querySelector('[data-act="remove"]'));
+  await click($$('.set-item')[1].querySelector('[data-act="remove"]')); // originally the third song
+  assert.deepEqual(titles(), [before[1]]);
+  assert.equal(toastText(), 'Removed 2 songs. [Undo]');
+  await click('#toast-action');
+  assert.deepEqual(titles(), before, 'the first removal was not orphaned by the second');
+  // A removal after the Undo starts a fresh one.
+  await click($$('.set-item')[2].querySelector('[data-act="remove"]'));
+  assert.equal(toastText(), `Removed “${before[2]}”. [Undo]`);
+  await click('#toast-action');
+  assert.deepEqual(titles(), before);
+});
+
+test('Replace on a duplicate prompt whose song has since been removed adds it instead of reporting a phantom "Replaced"', async () => {
+  const name = hymn().title;
+  await click('[data-tab="word"]');
+  await click('[data-scope="song"]');
+  await showSong(hymn());
+  await click('#add-to-set');
+  assert.ok(visible('#dup-prompt'));
+  assert.equal($('#dup-prompt').getAttribute('role'), 'alert', 'the prompt is announced, not silent');
+  assert.equal($('#banner').getAttribute('role'), 'status');
+
+  await click('[data-tab="setlist"]');
+  const row = $$('.set-item').find((li) => li.querySelector('.set-title').textContent === name);
+  await click(row.querySelector('[data-act="remove"]'));
+  assert.ok(!titles().includes(name));
+
+  await click('[data-dup="replace"]');
+  assert.ok(titles().includes(name), 'the song is in the list again');
+  assert.equal(titles().filter((t) => t === name).length, 1);
+  assert.equal(toastText(), 'The old copy was removed, so this one was added.');
+});
+
+test('an arrow key on a lone enabled radio does not save a choice the user never made', async () => {
+  await click('[data-tab="word"]');
+  assert.equal(store['sbx.prefs'].word.mode, 'chords');
+  await showSong(refrain()); // no chords: Chords is disabled, Lyrics is the only radio left
+  const lyrics = $$('[data-seg="word.mode"] [data-value]')[1];
+  lyrics.focus();
+  lyrics.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+  await tick();
+  assert.equal(store['sbx.prefs'].word.mode, 'chords', 'the stored preference is untouched');
+  await showSong(hymn());
+  assert.equal($$('[data-seg="word.mode"] [data-value]')[0].getAttribute('aria-checked'), 'true', 'later songs with chords still export with chords');
+});
+
 test('the tab needs a reload: the card offers it, and reloading works', async () => {
   // Empty the set list so nothing else is left to show, then lose the page.
   await click('[data-tab="setlist"]');
