@@ -119,7 +119,10 @@ function armToast() {
 
 // A short message above the action bar. `action` adds a button ({ label, run }) such as Undo;
 // a toast with a button stays longer, and stays while the pointer or focus is on it.
+let toastSeq = 0;
+
 function toast(message, { kind = 'ok', action = null, ms = action ? 7000 : 2800 } = {}) {
+  toastSeq += 1;
   const box = $('#toast');
   const button = $('#toast-action');
   $('#toast-text').textContent = message;
@@ -666,15 +669,38 @@ async function resolveDuplicate(choice) {
   const pending = state.pendingDuplicate;
   dismissDuplicatePrompt();
   if (!pending || choice === 'cancel') return;
-  if (choice === 'add') await setList.add(pending.song, { force: true });
-  if (choice === 'replace') await setList.replaceSong(pending.uid, pending.song);
-  toast(choice === 'add' ? 'Added again.' : 'Replaced.');
+  // The prompt outlives tab switches, so the flagged item may have been removed meanwhile:
+  // replacing nothing would report success and change nothing.
+  const stillThere = setList.get().items.some((it) => it.uid === pending.uid);
+  if (choice === 'add' || (choice === 'replace' && !stillThere)) {
+    await setList.add(pending.song, { force: true });
+    toast(choice === 'add' ? 'Added again.' : 'The old copy was removed, so this one was added.');
+    return;
+  }
+  await setList.replaceSong(pending.uid, pending.song);
+  toast('Replaced.');
 }
 
 // Removing or clearing can be undone from the toast: nothing here is lost by a slip of the mouse.
+// Removals made while one Undo is still on offer join it, so a second slip does not orphan the first.
+let removedBatch = [];
+let removedBatchToast = -1;
+
+async function undoRemoved(batch) {
+  // Newest first: each index was measured against the list as it stood after the earlier removals.
+  for (const { item, index } of [...batch].reverse()) await setList.insert([item], index);
+}
+
 async function removeSong(item, index) {
   await setList.remove(item.uid);
-  toast(`Removed “${item.song.title}”.`, { action: { label: 'Undo', run: () => setList.insert([item], index) } });
+  const undoOffered = $('#toast').classList.contains('show') && removedBatchToast === toastSeq;
+  if (!undoOffered) removedBatch = [];
+  removedBatch.push({ item, index });
+  const batch = removedBatch;
+  toast(batch.length === 1 ? `Removed “${item.song.title}”.` : `Removed ${plural(batch.length, 'song')}.`, {
+    action: { label: 'Undo', run: () => undoRemoved(batch) },
+  });
+  removedBatchToast = toastSeq;
 }
 
 async function clearSetList() {
@@ -698,7 +724,9 @@ function onRadioKeys(e) {
   const next = e.key === 'Home' ? 0 : e.key === 'End' ? radios.length - 1 : (at + keys[e.key] + radios.length) % radios.length;
   e.preventDefault();
   radios[next].focus();
-  radios[next].click();
+  // Nothing to move to (a lone enabled radio): clicking would save a choice the user never made,
+  // e.g. "Lyrics" written to the prefs while Chords is only disabled for this song.
+  if (next !== at) radios[next].click();
 }
 
 function bindSetListDrag() {

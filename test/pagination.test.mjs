@@ -333,6 +333,29 @@ test('drift guard: the planner\'s height for a song equals the height of the .do
   }
 });
 
+test('drift guard: what a joined (second-on-the-page) title adds is covered by PAIR_EXTRA_PT, in .docx and clipboard HTML alike', () => {
+  const [a, b] = [hymn(), lines(3, 'Second')];
+  const prefs = { font: 'Calibri', sizePt: 12, mode: 'lyrics' };
+  const alone = (song) => heightFromDocx(buildDocxParts([song], prefs));
+  // The rule's padding and line are not paragraph spacing, so the height helpers cannot see them.
+  const RULE_PT = 6 + 1;
+  const joinedDocx = heightFromDocx(buildDocxParts([a, b], { ...prefs, pages: [[0, 1]] })) - alone(a) - alone(b);
+  assert.ok(joinedDocx > 0, 'the joined title really does add space above it');
+  assert.ok(joinedDocx + RULE_PT <= PAIR_EXTRA_PT + 1e-6, `.docx adds ${joinedDocx + RULE_PT}pt, the planner reserves ${PAIR_EXTRA_PT}pt`);
+
+  const html = (songs, pages) => heightFromHtml(renderWordHtml(songs, { ...prefs, pages }));
+  const joinedHtml = html([a, b], [[0, 1]]) - html([a], [[0]]) - html([b], [[0]]);
+  assert.ok(joinedHtml > 0);
+  assert.ok(joinedHtml + RULE_PT <= PAIR_EXTRA_PT + 1e-6, `clipboard HTML adds ${joinedHtml + RULE_PT}pt, the planner reserves ${PAIR_EXTRA_PT}pt`);
+});
+
+test('an explicit undefined pairShort keeps the default (pairing stays on)', () => {
+  const [a, b] = [lines(3, 'One'), lines(3, 'Two')];
+  assert.equal(planPages([a, b], { pairShort: undefined }, { measure: noWrap }).pairedPages, 1);
+  assert.equal(planPages([a, b], { pairShort: false }, { measure: noWrap }).pairedPages, 0, 'false still means false');
+  assert.equal(wordOptions(a, { pairShort: undefined, sizePt: undefined }).sizePt, 12, 'other options too');
+});
+
 // The same for the clipboard HTML: sizes, <br> counts and margins read from inline styles.
 function heightFromHtml(html, font, mono) {
   const doc = new JSDOM(html).window.document;
