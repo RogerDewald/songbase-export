@@ -4,11 +4,13 @@
 import { TEXT_STYLES } from './text.js';
 
 export const PREFS_KEY = 'sbx.prefs';
-export const PREFS_SCHEMA = 1;
+// Bumped when stored prefs need rewriting; mergePrefs migrates anything older (see below).
+export const PREFS_SCHEMA = 2;
 
 export const FONTS = ['Calibri', 'Aptos', 'Arial', 'Cambria', 'Georgia', 'Garamond', 'Segoe UI', 'Times New Roman', 'Verdana'];
 export const MONO_FONTS = ['Consolas', 'Courier New', 'Cascadia Mono', 'Lucida Console'];
 export const SLIDE_FONTS = ['Arial', 'Calibri', 'Aptos', 'Segoe UI', 'Verdana', 'Georgia', 'Tahoma'];
+export const FORMATS = ['text', 'word', 'pptx']; // menu order; the first is the default
 export const THEMES = {
   dark: { bg: '000000', fg: 'FFFFFF' },
   light: { bg: 'FFFFFF', fg: '000000' },
@@ -17,7 +19,8 @@ export const THEMES = {
 
 export const DEFAULT_PREFS = {
   schema: PREFS_SCHEMA,
-  ui: { tab: 'word', scope: 'song', optsWord: false, optsText: false, optsPptx: false },
+  // `tab` is also the export scope (This song / Set list); `format` is the one chosen in the Export menu.
+  ui: { tab: 'song', format: 'text', optsWord: false, optsText: false, optsPptx: false },
   word: { mode: 'chords', font: 'Calibri', sizePt: 12, mono: 'Consolas', chordColor: true, chorusItalic: false, numbers: true, meta: true, comments: true, page: 'letter', pairShort: true },
   text: { style: 'chords', chorusIndent: 4, numbers: true, meta: true, comments: true },
   pptx: { theme: 'dark', bg: '000000', fg: 'FFFFFF', font: 'Arial', maxPt: 44, minPt: 28, maxLines: 8, titleSlides: true, blankBetweenSongs: false, repeatChorus: true, chorusItalic: false, notes: true },
@@ -29,7 +32,7 @@ const int = (min, max) => (v) => (Number.isInteger(v) && v >= min && v <= max ? 
 const color = (v) => (typeof v === 'string' && /^[0-9A-Fa-f]{6}$/.test(v) ? v.toUpperCase() : undefined);
 
 const SCHEMA = {
-  ui: { tab: oneOf(['word', 'text', 'pptx', 'setlist']), scope: oneOf(['song', 'setlist']), optsWord: bool, optsText: bool, optsPptx: bool },
+  ui: { tab: oneOf(['song', 'setlist']), format: oneOf(FORMATS), optsWord: bool, optsText: bool, optsPptx: bool },
   word: {
     mode: oneOf(['chords', 'lyrics']), font: oneOf(FONTS), sizePt: int(8, 20), mono: oneOf(MONO_FONTS),
     chordColor: bool, chorusItalic: bool, numbers: bool, meta: bool, comments: bool, page: oneOf(['letter', 'a4']), pairShort: bool,
@@ -45,6 +48,16 @@ const SCHEMA = {
 export function mergePrefs(stored) {
   const out = structuredClone(DEFAULT_PREFS);
   if (!stored || typeof stored !== 'object') return out;
+  // Schema 1 (up to 0.2): the format WAS the tab (word/text/pptx, beside a Set list tab) and a
+  // separate `scope` switch chose this song or the set list. Keep the format, and land on the
+  // Set list tab if either the old tab or the old scope was the set list.
+  const schema = Number.isInteger(stored.schema) ? stored.schema : 1;
+  if (schema < 2 && stored.ui && typeof stored.ui === 'object') {
+    const ui = { ...stored.ui };
+    if (FORMATS.includes(ui.tab)) ui.format = ui.tab;
+    ui.tab = ui.tab === 'setlist' || ui.scope === 'setlist' ? 'setlist' : 'song';
+    stored = { ...stored, ui };
+  }
   for (const [section, fields] of Object.entries(SCHEMA)) {
     const src = stored[section];
     if (!src || typeof src !== 'object') continue;

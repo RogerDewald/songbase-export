@@ -1,6 +1,6 @@
 {
   "name": "songbase-export",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Chrome extension: export songbase.life songs to Word, plain text and PowerPoint",

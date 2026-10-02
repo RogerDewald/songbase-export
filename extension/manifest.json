@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Songbase Export",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Export songs from songbase.life to Word, plain text or PowerPoint — chords, verse numbers and choruses included.",
   "minimum_chrome_version": "116",
   "icons": {

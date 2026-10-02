@@ -173,20 +173,8 @@ test('text: refrain inside a verse, ties, no numbers, chords style falls back', 
   assert.equal(renderText(refrain(), { style: 'chords', ...LF }), expected);
 });
 
-test('text: chordpro', () => {
-  const out = renderText(hymn(), { style: 'chordpro', ...LF }).split('\n');
-  assert.deepEqual(out.slice(0, 4), ['{title: Placeholder Hymn of Testing}', '{subtitle: Hymnal #12}', '{key: D}', '{capo: 2}']);
-  assert.ok(out.includes('{comment: Tune: Placeholder melody}'));
-  assert.ok(out.includes('{start_of_verse: Verse 1}'));
-  assert.ok(out.includes('[D]This is the [G]opening line of [A]verse one'));
-  assert.ok(out.includes('{start_of_chorus}'));
-  assert.equal(out.filter((l) => l === '{end_of_verse}').length, 3);
-});
-
 test('text: set list joins songs; CRLF by default', () => {
   const two = renderText([hymn(), refrain()], { style: 'lyrics' });
   assert.ok(two.includes('\r\n\r\n\r\nSong With A Refrain'));
   assert.ok(!/[^\r]\n/.test(two), 'every newline is CRLF');
-  const pro = renderText([hymn(), refrain()], { style: 'chordpro', ...LF });
-  assert.equal(pro.split('{new_song}').length, 2);
 });

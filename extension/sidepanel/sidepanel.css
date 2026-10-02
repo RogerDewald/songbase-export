@@ -1,5 +1,6 @@
-/* Side panel. Layout: a fixed top (header, tabs, scope), a scrolling body, and a docked
-   action bar, so Copy / Download are always in reach however long the preview is. */
+/* Side panel. Layout: two tabs at the top (This song / Set list), a scrolling body with the
+   active tab's content and the preview, and an Export menu that drops down from the Export
+   button like GitHub's "Code" button, holding the format tabs, options and actions. */
 
 :root {
   --bg: #ffffff;
@@ -19,6 +20,7 @@
   --radius: 8px;
   --radius-sm: 6px;
   --shadow: 0 1px 2px rgba(20, 30, 50, .12), 0 1px 4px rgba(20, 30, 50, .08);
+  --shadow-menu: 0 8px 24px rgba(20, 30, 50, .22), 0 1px 3px rgba(20, 30, 50, .12);
   color-scheme: light dark;
 }
 
@@ -39,6 +41,7 @@
     --ok: #6fd39a;
     --error: #f2b8b5;
     --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 1px 4px rgba(0, 0, 0, .4);
+    --shadow-menu: 0 8px 24px rgba(0, 0, 0, .6), 0 1px 3px rgba(0, 0, 0, .5);
   }
 }
 
@@ -88,116 +91,19 @@ button, input, select { font: inherit; color: inherit; }
 }
 .i-lg { width: 28px; height: 28px; stroke-width: 1.4; }
 
-/* ---------------------------------------------------------------- header */
-
-.head {
-  flex: none;
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 12px 12px 10px;
-}
-.head-text { flex: 1; min-width: 0; }
-.eyebrow { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-.eyebrow:empty { display: none; }
-.head h1 {
-  margin: 1px 0 0;
-  font-size: 16px;
-  line-height: 1.25;
-  font-weight: 650;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.meta { color: var(--muted); font-size: 12px; margin-top: 1px; }
-.meta:empty { display: none; }
-
-/* ---------------------------------------------------------------- buttons */
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font-weight: 500;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
-.btn:disabled { opacity: .5; cursor: default; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
-.btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
-.btn-primary.is-done { background: var(--ok); border-color: var(--ok); color: var(--accent-text); }
-.btn-grow { flex: 1; }
-.btn-small { height: 28px; padding: 0 10px; font-size: 12px; }
-.btn-quiet { background: transparent; border-color: transparent; color: var(--muted); }
-.btn-quiet:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; color: var(--text); }
-.btn-add { flex: none; height: 32px; padding: 0 12px 0 10px; }
-.btn-add.is-added { color: var(--ok); }
-.btn .i-done { display: none; }
-.btn.is-done .i-idle { display: none; }
-.btn.is-done .i-done { display: block; }
-
-.icon-btn {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
-.icon-btn:disabled { opacity: .3; cursor: default; }
-
-/* ---------------------------------------------------------------- notices */
-
-.notice {
-  flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin: 0 12px 8px;
-  padding: 8px 10px;
-  border-radius: var(--radius);
-  background: var(--warn-bg);
-  color: var(--warn-text);
-}
-.notice > span { flex: 1 1 180px; }
-.notice-actions { display: flex; gap: 6px; }
-.notice .btn { background: transparent; border-color: currentColor; color: inherit; }
-.notice .btn-quiet { border-color: transparent; }
-
-.hint {
-  margin: 0 0 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  background: var(--warn-bg);
-  color: var(--warn-text);
-}
-
-/* ---------------------------------------------------------------- tabs and scope */
+/* ---------------------------------------------------------------- tabs */
 
 .tabs {
   flex: none;
   display: flex;
   gap: 2px;
-  padding: 0 8px;
+  padding: 4px 8px 0;
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
   scrollbar-width: none;
 }
-.tabs [role="tab"] {
+/* One tab style for both rows: the main tabs and the format tabs inside the Export menu. */
+:is(.tabs, .menu-tabs) [role="tab"] {
   position: relative;
   padding: 10px 10px 9px;
   border: 0;
@@ -207,9 +113,9 @@ button, input, select { font: inherit; color: inherit; }
   white-space: nowrap;
   cursor: pointer;
 }
-.tabs [role="tab"]:hover { color: var(--text); }
-.tabs [role="tab"][aria-selected="true"] { color: var(--text); font-weight: 600; }
-.tabs [role="tab"][aria-selected="true"]::after {
+:is(.tabs, .menu-tabs) [role="tab"]:hover { color: var(--text); }
+:is(.tabs, .menu-tabs) [role="tab"][aria-selected="true"] { color: var(--text); font-weight: 600; }
+:is(.tabs, .menu-tabs) [role="tab"][aria-selected="true"]::after {
   content: "";
   position: absolute;
   left: 8px;
@@ -234,16 +140,108 @@ button, input, select { font: inherit; color: inherit; }
 }
 [aria-selected="true"] > .count { background: var(--accent-soft); color: var(--accent); }
 
-.subbar {
+/* ---------------------------------------------------------------- song header and toolbars */
+
+.head { min-width: 0; }
+.eyebrow { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.eyebrow:empty { display: none; }
+.head h1 {
+  margin: 1px 0 0;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.meta { color: var(--muted); font-size: 12px; margin-top: 1px; }
+.meta:empty { display: none; }
+
+/* A row of controls with the Export button pinned to its right end, on both tabs. */
+.toolbar { display: flex; gap: 8px; align-items: center; min-width: 0; }
+#song-body .toolbar { margin-top: 10px; }
+.toolbar .btn-export { margin-left: auto; }
+
+/* ---------------------------------------------------------------- buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.btn-primary:hover:not(:disabled) { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-small { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn-quiet { background: transparent; border-color: transparent; color: var(--muted); }
+.btn-quiet:hover:not(:disabled) { background: var(--surface-2); border-color: transparent; color: var(--text); }
+.btn-add { flex: none; height: 32px; padding: 0 12px 0 10px; }
+.btn-add.is-added { color: var(--ok); }
+
+/* A copy control shows its idle icon until flash() marks it done, then the tick instead. */
+.i-done { display: none; }
+.is-done .i-idle { display: none; }
+.is-done .i-done { display: block; }
+
+.btn-export { flex: none; height: 32px; padding: 0 10px 0 12px; }
+.btn-export .i-caret { width: 12px; height: 12px; margin-left: -2px; transition: transform .12s; }
+.btn-export[aria-expanded="true"] { background: var(--accent-strong); border-color: var(--accent-strong); }
+.btn-export[aria-expanded="true"] .i-caret { transform: rotate(180deg); }
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+.icon-btn:disabled { opacity: .3; cursor: default; }
+
+/* ---------------------------------------------------------------- notices */
+
+.notice {
   flex: none;
   display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--line);
+  margin: 8px 12px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+  color: var(--warn-text);
 }
-.subbar-label { color: var(--muted); font-size: 12px; }
-.subbar .seg { flex: 1; }
+.notice > span { flex: 1 1 180px; }
+.notice-actions { display: flex; gap: 6px; }
+.notice .btn { background: transparent; border-color: currentColor; color: inherit; }
+.notice .btn-quiet { border-color: transparent; }
+
+.hint {
+  margin: 0 0 10px;
+  padding: 7px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+/* ---------------------------------------------------------------- body */
 
 main {
   flex: 1;
@@ -251,7 +249,8 @@ main {
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
-.panel { padding: 12px 12px 18px; }
+.panel { padding: 12px 12px 14px; }
+.preview-block { padding-top: 2px; padding-bottom: 18px; }
 
 /* ---------------------------------------------------------------- segmented controls, swatches */
 
@@ -378,13 +377,64 @@ select:hover { border-color: var(--muted); }
 input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); }
 .fine { margin: 0; color: var(--muted); font-size: 12px; }
 
+/* ---------------------------------------------------------------- Export menu */
+
+/* Opens under the Export button in the flow of the page (sidepanel.js moves it into the active
+   tab's slot), styled like GitHub's "Code" dropdown but pushing the preview down rather than
+   covering it. */
+.menu {
+  margin-top: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow-menu);
+}
+.menu-tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 2px 8px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.menu-tabs [role="tab"] { padding: 9px 10px 8px; }
+/* The menu clips its content, so the focus ring sits inside the tab rather than being cut off. */
+.menu-tabs [role="tab"]:focus-visible { outline-offset: -2px; }
+.menu-opts { padding: 12px; }
+
+/* Action rows, separated by hairlines. */
+.menu-actions { padding: 4px 0; border-top: 1px solid var(--line); }
+.menu-item {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item + .menu-item { border-top: 1px solid var(--line); }
+.menu-item:hover:not(:disabled) { background: var(--surface); }
+.menu-item:focus-visible { outline-offset: -2px; }
+.menu-item:disabled { opacity: .5; cursor: default; }
+.menu-item .i { color: var(--muted); }
+.menu-item.is-done .i-done { color: var(--ok); }
+.menu-text { display: grid; gap: 1px; min-width: 0; }
+.menu-item .btn-label { font-weight: 600; }
+.menu-item.is-done .btn-label { color: var(--ok); }
+.menu-sub { color: var(--muted); font-size: 12px; }
+.menu-sub:empty { display: none; }
+
 /* ---------------------------------------------------------------- previews */
 
-.preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 14px 0 6px; }
+.preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0 0 6px; }
 .preview-title { margin: 0; font-size: 13px; font-weight: 600; }
 .preview-summary { color: var(--muted); font-size: 12px; text-align: right; }
 .preview-note { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
-.empty { margin: 0; color: var(--muted); }
 
 /* Word: each planned page is a white sheet, laid out at Word's text width and zoomed down
    to fit the panel (--pv-zoom is set from the panel width in sidepanel.js). */
@@ -398,7 +448,6 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
   border-radius: var(--radius);
   background: var(--surface);
 }
-.preview-word > .empty { justify-self: start; }
 .pv-page { min-width: 0; }
 .pv-label { margin: 0 0 4px 1px; color: var(--muted); font-size: 11px; }
 .sbx-sheet {
@@ -427,7 +476,6 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 }
 
 .preview-slides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.preview-slides > .empty { grid-column: 1 / -1; }
 .slide {
   position: relative;
   margin: 0;
@@ -447,7 +495,6 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 
 /* ---------------------------------------------------------------- set list */
 
-.setlist-head { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
 .name-field { flex: 1; min-width: 0; }
 .name-field input {
   width: 100%;
@@ -462,7 +509,7 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .name-field input:hover { border-color: var(--line); }
 .name-field input:focus { border-color: var(--accent); background: var(--bg); }
 
-.setlist { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.setlist { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
 .set-item {
   display: flex;
   align-items: center;
@@ -482,11 +529,12 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 .set-title { font-weight: 600; overflow-wrap: anywhere; }
 .set-buttons { flex: none; display: flex; align-items: center; }
 .set-buttons .btn-small { margin-right: 4px; }
+.list-foot { display: flex; justify-content: flex-end; margin-top: 6px; }
 
 /* ---------------------------------------------------------------- empty and first-run states */
 
-.welcome { display: grid; justify-items: center; gap: 10px; padding: 32px 20px 20px; text-align: center; }
-.welcome-inline { padding-top: 26px; }
+.welcome { display: grid; justify-items: center; gap: 10px; padding: 24px 8px 12px; text-align: center; }
+.welcome-inline { padding-top: 18px; }
 .welcome-art {
   display: grid;
   place-items: center;
@@ -498,28 +546,17 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 }
 .welcome h2 { margin: 0; font-size: 16px; }
 .welcome p { max-width: 34ch; margin: 0; color: var(--muted); }
+.welcome-list { font-size: 12px; }
 .steps { display: grid; gap: 4px; margin: 2px 0 6px; padding-left: 20px; color: var(--muted); text-align: left; }
 
-/* ---------------------------------------------------------------- dock and toast */
-
-.dock {
-  flex: none;
-  padding: 10px 12px;
-  border-top: 1px solid var(--line);
-  background: var(--bg);
-  box-shadow: 0 -6px 12px -10px rgba(0, 0, 0, .35);
-}
-.dock-group { display: flex; gap: 8px; align-items: center; }
-.dock-setlist { flex-direction: column; align-items: stretch; gap: 6px; }
-.dock-buttons { display: flex; gap: 8px; }
-.dock-label { color: var(--muted); font-size: 12px; }
+/* ---------------------------------------------------------------- toast */
 
 .toast {
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(var(--dock-h, 0px) + 10px);
-  z-index: 10;
+  bottom: 12px;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -547,10 +584,12 @@ input[type="checkbox"] { width: 15px; height: 15px; margin: 0; accent-color: var
 }
 
 @media (max-width: 340px) {
-  .tabs [role="tab"] { padding-left: 7px; padding-right: 7px; }
+  :is(.tabs, .menu-tabs) [role="tab"] { padding-left: 7px; padding-right: 7px; }
   .grid2 { gap: 10px 8px; }
+  .btn-export > span { display: none; } /* icon + caret only (the button keeps its aria-label): the two buttons must share one row */
+  .btn-export { padding: 0 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .toast, .opts > summary::before { transition: none; }
+  .toast, .opts > summary::before, .btn-export .i-caret { transition: none; }
 }
