@@ -1,4 +1,6 @@
-// Side panel: shows the current Songbase song (or the set list) and exports it.
+// Side panel: two tabs - the current Songbase song, and the set list - and an Export menu that
+// drops down from the Export button (like GitHub's "Code" button) with the format tabs, their
+// options, and the copy / download actions. The tab is what gets exported.
 
 import { normalizeSong, metaItems, songSig } from '../shared/ir.js';
 import { chromeArea } from '../shared/storage.js';
@@ -35,21 +37,10 @@ const state = {
   pendingDuplicate: null,
   busy: false,
   dragging: false,
+  menuOpen: false, // the Export menu; painted by paintMenu, so it survives tab switches
 };
 
-const STATUS_TITLES = {
-  connecting: 'Connecting…',
-  disconnected: 'Reconnecting…',
-  'no-tab': 'No active tab',
-  'not-songbase': 'Open a song on songbase.life',
-  'not-song': 'Open a song to export it',
-  loading: 'Waiting for the song to load…',
-  'no-content-script': 'Reload the Songbase tab',
-  'site-error': 'Songbase shows an error for this song',
-  empty: 'This song has no lines to export',
-};
-
-// What the body says when there is nothing to export yet (no song and an empty set list).
+// What the song tab says when there is no song to show.
 const WELCOME = {
   'not-songbase': { title: 'Open a song on Songbase', text: 'Export any song to Word, text or PowerPoint, with chords, verse numbers and choruses intact.', steps: true, action: { label: 'Open songbase.life', run: openSongbase } },
   'not-song': { title: 'Choose a song', text: 'You are on Songbase, but not on a song. Open one to export it.', steps: true },
@@ -61,6 +52,8 @@ const WELCOME = {
   empty: { title: 'This song has no lines', text: 'There is nothing to export from this page.' },
   'no-tab': { title: 'No active tab', text: 'Switch to a Songbase tab to export a song.', action: { label: 'Open songbase.life', run: openSongbase } },
 };
+
+const PREVIEW_TITLES = { word: 'Word preview', text: 'Text preview', pptx: 'Slide preview' };
 
 function openSongbase() {
   chromeApi.tabs.create({ url: SONGBASE_URL });
@@ -117,8 +110,8 @@ function armToast() {
   toastTimer = setTimeout(hideToast, toastMs);
 }
 
-// A short message above the action bar. `action` adds a button ({ label, run }) such as Undo;
-// a toast with a button stays longer, and stays while the pointer or focus is on it.
+// A short message at the bottom of the panel. `action` adds a button ({ label, run }) such as
+// Undo; a toast with a button stays longer, and stays while the pointer or focus is on it.
 let toastSeq = 0;
 
 function toast(message, { kind = 'ok', action = null, ms = action ? 7000 : 2800 } = {}) {
@@ -154,22 +147,24 @@ function flash(button, text = 'Copied') {
   }, 1600);
 }
 
-function effectiveScope(prefs) {
-  if (prefs.ui.tab === 'setlist') return 'setlist';
-  if (!state.song) return 'setlist';
-  // A set-list scope with nothing in the list would be a dead end: show the current song.
-  return prefs.ui.scope === 'setlist' && setList.get().items.length === 0 ? 'song' : prefs.ui.scope;
-}
-
+// The tab is the export scope: This song exports the page's song, Set list the whole list.
+// An empty result means there is nothing to export, so no Export button and no preview.
 function songsInScope(prefs) {
-  if (effectiveScope(prefs) === 'setlist') return setList.get().items.map((i) => i.song);
+  if (prefs.ui.tab === 'setlist') return setList.get().items.map((i) => i.song);
   return state.song ? [state.song] : [];
 }
 
 function baseName(prefs) {
-  const songs = songsInScope(prefs);
-  if (effectiveScope(prefs) === 'setlist') return `${setList.get().name} ${isoDate()}`;
-  return songs[0]?.title || 'song';
+  if (prefs.ui.tab === 'setlist') return `${setList.get().name} ${isoDate()}`;
+  return state.song?.title || 'song';
+}
+
+function showTab(tab) {
+  if (prefsStore.get().ui.tab === tab) return Promise.resolve();
+  return prefsStore.update('ui', { tab }).then(() => {
+    $('#scroll').scrollTop = 0;
+    render();
+  });
 }
 
 // ---------------------------------------------------------------- option controls
@@ -236,88 +231,40 @@ function syncControls(prefs) {
   paintOptionSummaries(prefs);
 }
 
-// ---------------------------------------------------------------- painting
+// ---------------------------------------------------------------- Export menu
 
-function paintHeader(welcome) {
-  const s = state.song;
-  const title = $('#song-title');
-  const meta = $('#song-meta');
-  const eyebrow = $('#status-line');
-  if (s) {
-    title.textContent = s.title;
-    meta.textContent = metaItems(s, { chords: true }).join(' · ');
-    eyebrow.textContent = s.transpose ? `Current song · transposed ${s.transpose > 0 ? '+' : ''}${s.transpose}` : 'Current song';
-  } else if (welcome) {
-    title.textContent = 'Songbase Export';
-    meta.textContent = '';
-    eyebrow.textContent = '';
-  } else {
-    title.textContent = STATUS_TITLES[state.status] || 'Songbase Export';
-    meta.textContent = state.status === 'not-songbase' || state.status === 'not-song' ? 'Your set list is still available below.' : '';
-    eyebrow.textContent = 'Songbase Export';
-  }
+// The menu opens in the flow of the page under the active tab's Export button (each tab has a
+// slot for it), so what follows it stays in view and scrolls with it. Open/closed is plain
+// state that paintMenu draws: it survives a tab switch (the menu moves to the other slot) and
+// the song going away and coming back, and only the button or Escape changes it.
+const menuEl = () => $('#export-menu');
+const activeToggle = () => $(`[data-panel="${prefsStore.get().ui.tab}"] [data-export-toggle]`);
 
-  const inList = Boolean(s && setList.findDuplicate(s));
-  const add = $('#add-to-set');
-  add.hidden = welcome; // nothing to add yet, and the welcome card says what to do
-  add.disabled = !s;
-  add.classList.toggle('is-added', inList);
-  $('#add-label').textContent = inList ? 'In set list' : 'Add to set list';
-  $('#add-icon').setAttribute('href', inList ? '#i-check' : '#i-plus');
-  add.title = !s
-    ? 'Open a song on Songbase to add it'
-    : inList
-      ? 'Already in the set list, in this key. Click to add it again or replace it.'
-      : 'Add this song, in its current key, to the set list';
-
-  const banner = $('#banner');
-  const action = $('#banner-action');
-  action.hidden = true;
-  action.onclick = null;
-  if (welcome) {
-    banner.hidden = true;
-  } else if (state.status === 'no-content-script') {
-    $('#banner-text').textContent = 'This tab was open before the extension started. Reload it to connect.';
-    action.textContent = 'Reload tab';
-    action.hidden = false;
-    action.onclick = reloadTab;
-    banner.hidden = false;
-  } else if (s && s.warnings.length) {
-    $('#banner-text').textContent = "Songbase's page looks different than expected. Check the output before using it.";
-    banner.title = s.warnings.join('\n');
-    banner.hidden = false;
-  } else {
-    banner.hidden = true;
-  }
+function openMenu() {
+  state.menuOpen = true;
+  render();
+  $('[data-format][aria-selected="true"]', menuEl())?.focus();
 }
 
-function paintTabs(prefs, welcome) {
-  for (const tab of $$('[role="tab"]')) {
+function closeMenu() {
+  state.menuOpen = false;
+  render();
+  activeToggle()?.focus();
+}
+
+// ---------------------------------------------------------------- painting
+
+function paintTabs(prefs) {
+  for (const tab of $$('.tabs [data-tab]')) {
     const selected = tab.dataset.tab === prefs.ui.tab;
     tab.setAttribute('aria-selected', String(selected));
     tab.tabIndex = selected ? 0 : -1;
   }
-  for (const panel of $$('[role="tabpanel"]')) panel.hidden = welcome || panel.dataset.panel !== prefs.ui.tab;
-  const count = setList.get().items.length;
-  $('#set-count').textContent = String(count);
-  $('#scope-count').textContent = String(count);
-
-  const scopeBar = $('#scope');
-  scopeBar.hidden = welcome || prefs.ui.tab === 'setlist';
-  const scope = effectiveScope(prefs);
-  for (const b of $$('[data-scope]', scopeBar)) {
-    const isSong = b.dataset.scope === 'song';
-    b.setAttribute('aria-checked', String(b.dataset.scope === scope));
-    b.tabIndex = b.dataset.scope === scope ? 0 : -1;
-    b.disabled = isSong ? !state.song : count === 0;
-    b.title = b.disabled ? (isSong ? 'Open a song on Songbase first' : 'Add songs to the set list first') : '';
-  }
+  for (const panel of $$('[data-panel]')) panel.hidden = panel.dataset.panel !== prefs.ui.tab;
+  $('#set-count').textContent = String(setList.get().items.length);
 }
 
-function paintWelcome(welcome) {
-  const card = $('#welcome');
-  card.hidden = !welcome;
-  if (!welcome) return;
+function paintWelcome() {
   const info = WELCOME[state.status] || WELCOME['not-songbase'];
   $('#welcome-title').textContent = info.title;
   $('#welcome-text').textContent = info.text;
@@ -327,36 +274,100 @@ function paintWelcome(welcome) {
   button.hidden = !info.action;
   button.textContent = info.action ? info.action.label : '';
   button.onclick = info.action ? info.action.run : null;
+  // The set list is a tab away, and exports on its own.
+  const count = setList.get().items.length;
+  const list = $('#welcome-list');
+  list.hidden = !count;
+  list.textContent = count ? `Your set list (${plural(count, 'song')}) is on its own tab, and still exports.` : '';
 }
 
-// The action bar shows the buttons of the current tab only; the toast sits just above it.
-function paintDock(prefs, welcome) {
-  const dock = $('#dock');
-  const emptyList = setList.get().items.length === 0;
-  for (const group of $$('[data-dock]', dock)) {
-    // The set list's export buttons have nothing to export while the list is empty.
-    group.hidden = group.dataset.dock !== prefs.ui.tab || (group.dataset.dock === 'setlist' && emptyList);
+// The song tab: the song's title and details with Add / Export, or a card saying why there is none.
+function paintSongTab() {
+  const s = state.song;
+  $('#welcome').hidden = Boolean(s);
+  $('#song-body').hidden = !s;
+  if (s) {
+    $('#song-title').textContent = s.title;
+    $('#song-meta').textContent = metaItems(s, { chords: true }).join(' · ');
+    $('#status-line').textContent = s.transpose ? `Current song · transposed ${s.transpose > 0 ? '+' : ''}${s.transpose}` : 'Current song';
+  } else {
+    paintWelcome();
   }
-  dock.hidden = welcome || $$('[data-dock]', dock).every((group) => group.hidden);
-  $('#txt-ext').textContent = prefs.text.style === 'chordpro' ? '.cho' : '.txt';
-  requestAnimationFrame(() => document.documentElement.style.setProperty('--dock-h', `${dock.hidden ? 0 : dock.offsetHeight}px`));
+
+  const inList = Boolean(s && setList.findDuplicate(s));
+  const add = $('#add-to-set');
+  add.disabled = !s;
+  add.classList.toggle('is-added', inList);
+  $('#add-label').textContent = inList ? 'In set list' : 'Add to set list';
+  $('#add-icon').setAttribute('href', inList ? '#i-check' : '#i-plus');
+  add.title = inList ? 'Already in the set list, in this key. Click to add it again or replace it.' : 'Add this song, in its current key, to the set list';
 }
+
+// The notice above both tabs: a Songbase tab that needs reloading, or songs about to be exported
+// whose page looked different than expected. On the song tab with no song the card says it all.
+function paintBanner(prefs, songs) {
+  const banner = $('#banner');
+  const action = $('#banner-action');
+  action.hidden = true;
+  action.onclick = null;
+  banner.title = '';
+  const warned = songs.filter((s) => s.warnings.length);
+  if (prefs.ui.tab === 'song' && !state.song) {
+    banner.hidden = true;
+  } else if (state.status === 'no-content-script') {
+    $('#banner-text').textContent = 'This tab was open before the extension started. Reload it to connect.';
+    action.textContent = 'Reload tab';
+    action.hidden = false;
+    action.onclick = reloadTab;
+    banner.hidden = false;
+  } else if (warned.length) {
+    $('#banner-text').textContent =
+      prefs.ui.tab === 'setlist'
+        ? `${plural(warned.length, 'song')} in the set list looked different than expected when added. Check the output before using it.`
+        : "Songbase's page looks different than expected. Check the output before using it.";
+    banner.title = warned.flatMap((s) => s.warnings).join('\n');
+    banner.hidden = false;
+  } else {
+    banner.hidden = true;
+  }
+}
+
+function paintMenu(prefs, canExport) {
+  const menu = menuEl();
+  // Under the active tab's button. Moving a node drops focus from anything inside it, so put it back.
+  const slot = $(`[data-menu-slot="${prefs.ui.tab}"]`);
+  const focused = menu.contains(document.activeElement) ? document.activeElement : null;
+  if (menu.parentElement !== slot) {
+    slot.append(menu);
+    focused?.focus();
+  }
+  const open = state.menuOpen && canExport;
+  menu.hidden = !open;
+  for (const b of $$('[data-export-toggle]')) b.setAttribute('aria-expanded', String(open));
+  // Hidden from under the user's focus (the song went away): land on the tab, not on <body>.
+  if (!open && focused) $('.tabs [aria-selected="true"]')?.focus();
+
+  const format = prefs.ui.format;
+  for (const tab of $$('[data-format]')) {
+    const selected = tab.dataset.format === format;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+  }
+  for (const panel of $$('[data-format-panel]')) panel.hidden = panel.dataset.formatPanel !== format;
+}
+
+// Whether the chosen format, as it is set up, would include chords: the only case the chord hint helps.
+const USES_CHORDS = { text: (p) => p.text.style !== 'lyrics', word: (p) => p.word.mode === 'chords', pptx: (p) => p.pptx.notes };
 
 function chordHint(prefs) {
-  if (effectiveScope(prefs) !== 'song' || !state.song) return '';
+  if (prefs.ui.tab !== 'song' || !state.song) return '';
   if (state.song.chordsHidden) return "Chords are hidden on Songbase. Turn them on with Songbase's ♫ button to include them.";
   if (!state.song.hasChords) return 'This song has no chords, so it exports as lyrics.';
   return '';
 }
 
-function setActions(group, enabled) {
-  for (const b of $$(`[data-dock="${group}"] [data-action]`)) b.disabled = !enabled || state.busy;
-}
-
-function emptyNote(prefs) {
-  return effectiveScope(prefs) === 'setlist'
-    ? 'Your set list is empty. Add songs with “Add to set list” while viewing them on Songbase.'
-    : 'Open a song on songbase.life to see a preview.';
+function setActions(format, enabled) {
+  for (const b of $$(`[data-format-panel="${format}"] [data-action]`)) b.disabled = !enabled || state.busy;
 }
 
 // Word's preview is laid out at Word's text width and scaled to fit the panel.
@@ -392,14 +403,9 @@ function describePages(plan, count, prefs) {
 }
 
 function paintWord(prefs, songs) {
-  const panel = $('[data-panel="word"]');
-  const hint = $('[data-hint="chords"]', panel);
-  hint.textContent = chordHint(prefs);
-  hint.hidden = !hint.textContent;
-
   // Without chords in the export, "Chords above words" is not an option: show what will happen.
   const anyChords = songs.some((s) => s.hasChords);
-  const seg = $('[data-seg="word.mode"]', panel);
+  const seg = $('[data-seg="word.mode"]');
   const chordsButton = $('[data-value="chords"]', seg);
   chordsButton.disabled = !anyChords;
   chordsButton.title = anyChords ? '' : 'There are no chords to show';
@@ -409,26 +415,18 @@ function paintWord(prefs, songs) {
     b.tabIndex = b.dataset.value === layout ? 0 : -1;
   }
 
-  const target = $('#preview-word');
-  const summary = $('#word-summary');
-  const note = $('#word-note');
-  if (!songs.length) {
-    target.replaceChildren(el('p', { class: 'empty' }, emptyNote(prefs)));
-    summary.textContent = '';
-    note.hidden = true;
-    state.payload.word = null;
-    return setActions('word', false);
-  }
   // Which songs share a page is decided once here and reused by the preview, the copy and
   // (planned again on click, from the same inputs) the .docx.
   const plan = planPages(songs, prefs.word, { measure: canvasMeasure });
   const options = { ...prefs.word, pages: plan.pages };
+  const target = $('#preview-word');
   // Every piece of song text in this HTML went through escapeHtml in the renderer.
   target.innerHTML = renderWordPreview(songs, options);
   labelSheets(target);
   updatePreviewZoom();
   const described = describePages(plan, songs.length, prefs);
-  summary.textContent = described.summary;
+  $('#preview-summary').textContent = described.summary;
+  const note = $('#preview-note');
   note.textContent = described.note;
   note.hidden = !described.note;
   state.payload.word = {
@@ -439,18 +437,8 @@ function paintWord(prefs, songs) {
 }
 
 function paintText(prefs, songs) {
-  const panel = $('[data-panel="text"]');
-  const hint = $('[data-hint="chords"]', panel);
-  hint.textContent = prefs.text.style === 'lyrics' ? '' : chordHint(prefs);
-  hint.hidden = !hint.textContent;
-  const target = $('#preview-text');
-  if (!songs.length) {
-    target.textContent = emptyNote(prefs);
-    state.payload.text = null;
-    return setActions('text', false);
-  }
   const text = renderText(songs, prefs.text);
-  target.textContent = text.replace(/\r\n/g, '\n');
+  $('#preview-text').textContent = text.replace(/\r\n/g, '\n');
   state.payload.text = { text };
   setActions('text', true);
 }
@@ -479,22 +467,37 @@ function slideThumb(slide, index, prefs, k) {
 
 function paintSlides(prefs, songs) {
   const target = $('#preview-slides');
-  const summary = $('#pptx-summary');
-  if (!songs.length) {
-    target.replaceChildren(el('p', { class: 'empty' }, emptyNote(prefs)));
-    summary.textContent = '';
-    return setActions('pptx', false);
-  }
   const plan = planDeck(songs, prefs.pptx, canvasMeasure);
   const lyricSlides = plan.slides.filter((s) => s.kind === 'lyrics');
   const sizes = [...new Set(lyricSlides.map((s) => s.pt))];
   const range = !sizes.length ? '' : sizes.length === 1 ? ` · text ${sizes[0]} pt` : ` · text ${Math.min(...sizes)}–${Math.max(...sizes)} pt`;
-  summary.textContent = `${plural(plan.slides.length, 'slide')}${range}${plan.warnings.length ? ` · ${plan.warnings.join('; ')}` : ''}`;
+  $('#preview-summary').textContent = `${plural(plan.slides.length, 'slide')}${range}${plan.warnings.length ? ` · ${plan.warnings.join('; ')}` : ''}`;
   // Thumbnail scale: CSS px per point at the thumbnail's width.
   const width = Math.max(120, (target.clientWidth - 8) / 2);
   const k = width / (SLIDE.w * 72);
   target.replaceChildren(...plan.slides.map((s, i) => slideThumb(s, i, prefs, k)));
   setActions('pptx', true);
+}
+
+// The preview block under the active tab, in the format chosen in the Export menu.
+function paintPreview(prefs, songs) {
+  state.payload = { word: null, text: null };
+  $('#preview').hidden = !songs.length;
+  if (!songs.length) {
+    for (const b of $$('#export-menu [data-action]')) b.disabled = true;
+    return;
+  }
+  const format = prefs.ui.format;
+  for (const p of $$('[data-preview]')) p.hidden = p.dataset.preview !== format;
+  $('#preview-title').textContent = PREVIEW_TITLES[format];
+  $('#preview-summary').textContent = '';
+  $('#preview-note').hidden = true;
+  const hint = $('#hint');
+  hint.textContent = USES_CHORDS[format](prefs) ? chordHint(prefs) : '';
+  hint.hidden = !hint.textContent;
+  if (format === 'word') paintWord(prefs, songs);
+  else if (format === 'text') paintText(prefs, songs);
+  else paintSlides(prefs, songs);
 }
 
 function setItem(item, i, total) {
@@ -552,24 +555,18 @@ function paintSetList() {
   const empty = sl.items.length === 0;
   $('#setlist-empty').hidden = !empty;
   $('#setlist-tools').hidden = empty;
+  $('#setlist-foot').hidden = empty;
 }
 
 function render() {
   const prefs = prefsStore.get();
-  const welcome = !state.song && setList.get().items.length === 0 && prefs.ui.tab !== 'setlist';
-  paintHeader(welcome);
-  paintTabs(prefs, welcome);
-  paintWelcome(welcome);
-  paintDock(prefs, welcome);
-  if (welcome) {
-    state.payload = { word: null, text: null };
-  } else {
-    const songs = songsInScope(prefs);
-    if (prefs.ui.tab === 'word') paintWord(prefs, songs);
-    else if (prefs.ui.tab === 'text') paintText(prefs, songs);
-    else if (prefs.ui.tab === 'pptx') paintSlides(prefs, songs);
-  }
+  const songs = songsInScope(prefs);
+  paintTabs(prefs);
+  paintSongTab();
+  paintBanner(prefs, songs);
   paintSetList();
+  paintMenu(prefs, songs.length > 0);
+  paintPreview(prefs, songs);
 }
 
 // ---------------------------------------------------------------- actions
@@ -594,6 +591,10 @@ function savedToast(id, name) {
   toast(`Saved ${name} to Downloads.`, { action: canShow ? { label: 'Show', run: () => chromeApi.downloads.show(id) } : null });
 }
 
+// Copy confirms on the row itself; a download reports in the toast, which says where the file
+// went. Neither closes the menu: the next export is often the same songs in another format.
+// A download's title and file name are fixed BEFORE the render starts: the page can move to
+// another song while a deck is being built, and the file must still be named for what is in it.
 const actions = {
   'copy-word'(button) {
     const payload = state.payload.word;
@@ -615,10 +616,11 @@ const actions = {
     const prefs = prefsStore.get();
     const songs = songsInScope(prefs);
     if (!songs.length) return;
+    const title = baseName(prefs);
+    const name = safeFileName(title, 'docx');
     return withBusy('Download', async () => {
       const plan = planPages(songs, prefs.word, { measure: canvasMeasure });
-      const blob = await renderDocx(songs, { ...prefs.word, docTitle: baseName(prefs), pages: plan.pages }, globalThis.JSZip, 'blob');
-      const name = safeFileName(baseName(prefs), 'docx');
+      const blob = await renderDocx(songs, { ...prefs.word, docTitle: title, pages: plan.pages }, globalThis.JSZip, 'blob');
       savedToast(await downloadBlob(chromeApi, blob, name), name);
     });
   },
@@ -626,11 +628,9 @@ const actions = {
     const prefs = prefsStore.get();
     const payload = state.payload.text;
     if (!payload) return;
+    const name = safeFileName(baseName(prefs), 'txt');
     return withBusy('Download', async () => {
-      const chordPro = prefs.text.style === 'chordpro';
-      // ChordPro parsers are better without the BOM.
-      const blob = new Blob([(chordPro ? '' : UTF8_BOM) + payload.text + '\r\n'], { type: 'text/plain;charset=utf-8' });
-      const name = safeFileName(baseName(prefs), chordPro ? 'cho' : 'txt');
+      const blob = new Blob([UTF8_BOM + payload.text + '\r\n'], { type: 'text/plain;charset=utf-8' });
       savedToast(await downloadBlob(chromeApi, blob, name), name);
     });
   },
@@ -638,9 +638,10 @@ const actions = {
     const prefs = prefsStore.get();
     const songs = songsInScope(prefs);
     if (!songs.length) return;
+    const title = baseName(prefs);
+    const name = safeFileName(title, 'pptx');
     return withBusy('Download', async () => {
-      const { data } = await renderPptx(globalThis.PptxGenJS, songs, { ...prefs.pptx, docTitle: baseName(prefs) }, canvasMeasure, 'blob');
-      const name = safeFileName(baseName(prefs), 'pptx');
+      const { data } = await renderPptx(globalThis.PptxGenJS, songs, { ...prefs.pptx, docTitle: title }, canvasMeasure, 'blob');
       savedToast(await downloadBlob(chromeApi, data, name), name);
     });
   },
@@ -657,7 +658,7 @@ async function addCurrentSong() {
     return;
   }
   const count = setList.get().items.length;
-  toast(`Added to “${setList.get().name}” (${count}).`, { action: { label: 'View', run: () => prefsStore.update('ui', { tab: 'setlist' }).then(render) } });
+  toast(`Added to “${setList.get().name}” (${count}).`, { action: { label: 'View', run: () => showTab('setlist') } });
 }
 
 function dismissDuplicatePrompt() {
@@ -712,7 +713,7 @@ async function clearSetList() {
 
 // ---------------------------------------------------------------- events
 
-// Arrow keys move through a radio group (segmented control, swatches, scope) like native radios.
+// Arrow keys move through a radio group (segmented control, swatches) like native radios.
 function onRadioKeys(e) {
   const keys = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 };
   if (!(e.key in keys) && e.key !== 'Home' && e.key !== 'End') return;
@@ -727,6 +728,33 @@ function onRadioKeys(e) {
   // Nothing to move to (a lone enabled radio): clicking would save a choice the user never made,
   // e.g. "Lyrics" written to the prefs while Chords is only disabled for this song.
   if (next !== at) radios[next].click();
+}
+
+// A row of tabs: click picks, Left/Right move and pick (both the main tabs and the format tabs).
+function bindTabList(tabs, pick) {
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => pick(tab));
+    tab.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      e.preventDefault();
+      const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
+      next.focus();
+      pick(next);
+    });
+  }
+}
+
+function bindExportMenu() {
+  for (const b of $$('[data-export-toggle]')) b.addEventListener('click', () => (state.menuOpen ? closeMenu() : openMenu()));
+  bindTabList($$('[data-format]'), (tab) => prefsStore.update('ui', { format: tab.dataset.format }).then(render));
+  // Escape closes the menu only from inside it (or from its button): elsewhere, Escape means
+  // whatever it means there - backing out of the set list name, say - and must not steal focus.
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || e.isComposing || !state.menuOpen) return;
+    if (!menuEl().contains(e.target) && !e.target.closest?.('[data-export-toggle]')) return;
+    e.preventDefault();
+    closeMenu();
+  });
 }
 
 function bindSetListDrag() {
@@ -815,30 +843,8 @@ function bindEvents() {
     });
   }
 
-  const tabs = $$('[role="tab"]');
-  for (const tab of tabs) {
-    tab.addEventListener('click', () => {
-      prefsStore.update('ui', { tab: tab.dataset.tab }).then(() => {
-        $('#scroll').scrollTop = 0;
-        render();
-      });
-    });
-    tab.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
-      const next = tabs[(tabs.indexOf(tab) + (e.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length];
-      next.focus();
-      next.click();
-    });
-  }
-  for (const b of $$('[data-scope]')) b.addEventListener('click', () => prefsStore.update('ui', { scope: b.dataset.scope }).then(render));
-  for (const b of $$('[data-goto]')) {
-    b.addEventListener('click', () =>
-      prefsStore.update('ui', { tab: b.dataset.goto, scope: 'setlist' }).then(() => {
-        $('#scroll').scrollTop = 0;
-        render();
-      }),
-    );
-  }
+  bindTabList($$('.tabs [data-tab]'), (tab) => showTab(tab.dataset.tab));
+  bindExportMenu();
   for (const b of $$('[data-action]')) b.addEventListener('click', () => actions[b.dataset.action](b));
   for (const b of $$('[data-dup]')) b.addEventListener('click', () => resolveDuplicate(b.dataset.dup));
 
@@ -862,7 +868,7 @@ function bindEvents() {
   // Panel resized: refit the Word preview; slide thumbnails are sized from the width too.
   new ResizeObserver(() => {
     updatePreviewZoom();
-    if (prefsStore.get().ui.tab === 'pptx') render();
+    if (prefsStore.get().ui.format === 'pptx' && songsInScope(prefsStore.get()).length) render();
   }).observe($('#scroll'));
 }
 

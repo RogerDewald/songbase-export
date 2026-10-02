@@ -17,8 +17,7 @@ the selected tune and whether chords are on. It then writes each format properly
 |---|---|---|
 | A song sheet in **Word** | **Copy for Word**, then Ctrl+V in Word | Keeps the bold title, hymn number, verse numbers with hanging indents and the indented chorus. Chords sit above the words in a fixed-width font (Consolas). |
 | A **Word file** to keep or print | **Download .docx** | Uses named styles (*Verse*, *Chorus*, *Chord*, *Verse Number*, *Song Meta*), so you can restyle every chord or verse in one click. Each song starts on its own page, unless two neighbouring songs both fit whole on one page (see below). |
-| **Plain text** (email, messages, notes) | **Copy text** with *Chords over lyrics* or *Lyrics only* | Chords line up in any fixed-width font. |
-| A **music app** (OnSong, SongbookPro, Planning Center, ChordPro tools) | **Copy text** or **Download** with *ChordPro* | Saved as `.cho`. |
+| **Plain text** (email, messages, notes) | **Copy text** or **Download .txt** with *Chords + lyrics* or *Lyrics only* | Chords line up in any fixed-width font. |
 | **PowerPoint** slides | **Download .pptx** | Pasted text always lands on one slide, so the extension builds the deck itself: one slide per verse or chorus, a title slide, and text sized to fit. The chorus can repeat after every verse. Chords go in the speaker notes. |
 
 ## Install (one time)
@@ -38,17 +37,23 @@ To update after changing files, click the reload icon on the extension's card in
 1. Open a song on songbase.life. Transpose it or pick a tune there if you like.
 2. Click the extension icon (or press **Alt+Shift+S**). The side panel opens and stays open
    while you move between songs.
-3. Pick **Word**, **Text** or **PowerPoint**. The choice that matters most (chords above the
-   words or lyrics only, text style, slide colours) is right at the top; fonts and the rest
-   are under **Options**, which shows a one-line summary and remembers whether you left it
-   open. The buttons to copy or download stay at the bottom of the panel however far you
-   scroll the preview.
+3. The panel has two tabs: **This song** and **Set list**. Whichever tab is open is what gets
+   exported. Press **Export** and pick **Text**, **Word** or **PowerPoint** in the menu that
+   opens under the button (Text is selected to begin with). The menu stays open until you press
+   **Export** again or Esc, and it follows you between the tabs. On **This song** the preview
+   sits right below it; on **Set list** the list of songs comes first and the preview follows.
+   The choice that matters most (chords above the words or lyrics only, text
+   style, slide colours) is right there; fonts and the rest are under **Options**, which
+   shows a one-line summary and remembers whether you left it open. The rows at the bottom
+   of the menu copy or download (**Copy for Word**, **Download .docx**, **Copy text**,
+   **Download .txt**, **Download .pptx**). The preview under the tab follows the format you
+   picked and updates as you change options.
 4. **Set list:** on each song, press **Add to set list** (it turns into **In set list** once the
-   song is there in that key). Each song keeps the key it was in when you added it. In any
-   format tab, switch *This song / Set list* to export the whole list as one document or
-   one deck. On the **Set list** tab, drag songs by the grip (or use the arrows) to reorder
-   them, and rename the list; removing a song or clearing the list has an **Undo** in the
-   message that appears. The toolbar badge shows how many songs are in the list.
+   song is there in that key). Each song keeps the key it was in when you added it. On the
+   **Set list** tab, **Export** exports the whole list as one document or one deck; drag songs
+   by the grip (or use the arrows) to reorder them, and rename the list; removing a song or
+   clearing the list has an **Undo** in the message that appears. The tab and the toolbar
+   badge both show how many songs are in the list.
 
 ### Pages in Word
 
@@ -106,7 +111,9 @@ church's licence (for example CCLI), not by this tool.
 - [ ] **Copy text** → paste into Notepad; the chords line up.
 - [ ] Add 2–3 songs to the set list, restart Chrome, and they are still there.
 - [ ] Remove a song and clear the set list; **Undo** brings them back in place.
-- [ ] On a non-Songbase tab the panel shows only the set list, and it still exports.
+- [ ] On a non-Songbase tab, **This song** says to open one and the **Set list** tab still exports.
+- [ ] **Export** opens the menu under the button on both tabs; on **This song** the preview is right below it. Esc (from inside the menu) or the button closes it; switching tabs or clicking elsewhere does not.
+- [ ] With the menu open, switch to a non-Songbase tab and back: the menu is still open.
 - [ ] After reloading the extension, the panel's **Reload tab** button recovers.
 
 ## For developers
@@ -139,8 +146,8 @@ planner's height estimate is within 1.5% of Word's,
 and the per-font line heights in `pagination.js` match Word's. Run it after changing fonts,
 sizes, spacing or `pagination.js`. (`-Paste` replaces the clipboard contents.)
 
-To check the real Chrome clipboard path, open the panel on a Songbase song and choose
-*Lyrics only*. Click **Copy for Word**, then run:
+To check the real Chrome clipboard path, open the panel on a Songbase song, press **Export**,
+pick **Word** and *Lyrics only*, click **Copy for Word**, then run:
 
 ```
 powershell -NoProfile -STA -File test/office/verify-paste.ps1 -FromClipboard

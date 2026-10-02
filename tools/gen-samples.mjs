@@ -102,7 +102,6 @@ for (const font of [...FONTS, ...MONO_FONTS]) {
 
 await writeFile(path.join(out, 'sample-chords.txt'), renderText(setList(), { style: 'chords' }) + '\r\n');
 await writeFile(path.join(out, 'sample-lyrics.txt'), renderText(setList(), { style: 'lyrics' }) + '\r\n');
-await writeFile(path.join(out, 'sample.chordpro.txt'), renderText(setList(), { style: 'chordpro' }) + '\r\n');
 
 // PowerPoint samples are appended by tools/gen-pptx-samples.mjs once the deck builder exists.
 try {

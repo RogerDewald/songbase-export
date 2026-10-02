@@ -11,7 +11,7 @@ test('prefs: defaults, validation, theme colours', () => {
   assert.deepEqual(mergePrefs(undefined), DEFAULT_PREFS);
   const p = mergePrefs({
     word: { font: 'Evil\'; font-family:x', sizePt: 99, mode: 'lyrics', chordColor: false },
-    text: { style: 'chordpro', chorusIndent: 2 },
+    text: { style: 'lyrics', chorusIndent: 2 },
     pptx: { theme: 'light', bg: 'zzzzzz', maxPt: 40, minPt: 50, maxLines: 6 },
     junk: { a: 1 },
   });
@@ -19,7 +19,8 @@ test('prefs: defaults, validation, theme colours', () => {
   assert.equal(p.word.sizePt, 12, 'out-of-range size rejected');
   assert.equal(p.word.mode, 'lyrics');
   assert.equal(p.word.chordColor, false);
-  assert.equal(p.text.style, 'chordpro');
+  assert.equal(p.text.style, 'lyrics');
+  assert.equal(mergePrefs({ text: { style: 'chordpro' } }).text.style, 'chords', 'the removed ChordPro style falls back to the default');
   assert.deepEqual([p.pptx.bg, p.pptx.fg], ['FFFFFF', '000000'], 'named theme sets colours');
   assert.equal(p.pptx.minPt, 40, 'min never above max');
   assert.equal(p.junk, undefined);
@@ -134,4 +135,23 @@ test('set list: corrupt or old data is dropped, never thrown', async () => {
   assert.equal(loaded.name, 'Set list');
   const garbage = createSetListStore(memoryArea({ [SETLIST_KEY]: 'nonsense' }));
   assert.deepEqual((await garbage.load()).items, []);
+});
+
+test('prefs: 0.2 (schema 1) data keeps its format, and its set-list scope becomes the Set list tab', () => {
+  assert.equal(DEFAULT_PREFS.ui.format, 'text', 'Text is the default format');
+  assert.equal(DEFAULT_PREFS.schema, 2);
+  // Schema 1 stored no `schema` field at all in practice; both spellings are 0.2 data.
+  for (const old of [{ ui: { tab: 'pptx', scope: 'setlist' } }, { schema: 1, ui: { tab: 'pptx', scope: 'setlist' } }]) {
+    const p = mergePrefs(old);
+    assert.equal(p.ui.tab, 'setlist', 'was exporting the set list: still is');
+    assert.equal(p.ui.format, 'pptx');
+    assert.equal(p.schema, 2, 'rewritten at the current schema');
+    assert.equal('scope' in p.ui, false, 'the old scope switch is gone: the tab is the scope');
+  }
+  assert.deepEqual([mergePrefs({ ui: { tab: 'word', scope: 'song' } }).ui.tab, mergePrefs({ ui: { tab: 'word', scope: 'song' } }).ui.format], ['song', 'word']);
+  assert.equal(mergePrefs({ ui: { tab: 'setlist', scope: 'song' } }).ui.tab, 'setlist', 'the old Set list tab stays the Set list tab');
+  assert.equal(mergePrefs({ ui: { tab: 'word' } }).ui.tab, 'song', 'no scope stored: this song');
+  // Current data is left alone, format and all.
+  assert.deepEqual(mergePrefs({ schema: 2, ui: { tab: 'song', format: 'pptx' } }).ui, { ...DEFAULT_PREFS.ui, format: 'pptx' });
+  assert.deepEqual(mergePrefs({ ui: { tab: 'nonsense', format: 'pdf' } }).ui, DEFAULT_PREFS.ui);
 });
